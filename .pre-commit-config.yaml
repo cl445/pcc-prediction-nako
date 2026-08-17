@@ -1,0 +1,80 @@
+# Pre-commit hooks: the same gates as `make check` and CI, one step earlier.
+#
+# Install once per clone:
+#     uv run pre-commit install
+#
+# The linters are `repo: local` on purpose. Their versions are pinned in
+# pyproject.toml and resolved through uv.lock, so `uv run` here executes
+# exactly what `make lint`, `make format-check`, `make typecheck` and the CI
+# workflow execute.
+# Declaring ruff through ruff-pre-commit instead would pin its version a
+# second time, in a place that can drift from the lockfile without anyone
+# noticing: the hook and `make lint` would then enforce different rules.
+#
+# Tests are deliberately not a hook: 85 seconds is too long for a commit.
+# CI runs them on every push and pull request.
+
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff (lint, autofix)
+        # --force-exclude makes ruff honour the excludes in pyproject.toml
+        # even though pre-commit hands it explicit file paths.
+        entry: uv run ruff check --fix --force-exclude
+        language: system
+        types_or: [python, pyi]
+
+      - id: ruff-format
+        name: ruff (format)
+        # After the autofixing linter, not before: a fix changes how a line
+        # wraps, so the formatter has to see the fixed file to leave it in a
+        # stable state.
+        #
+        # This hook writes, like the linter above it: an unformatted file is
+        # reformatted on the spot and the commit stopped once, so `git add`
+        # and a second `git commit` carry the formatted version. Nobody is
+        # ever sent off to run `make format` by hand.
+        #
+        # CI's `make format-check` only reports, which is the right split: a
+        # runner that rewrote the tree could tell you about the change but
+        # not hand it back.
+        entry: uv run ruff format --force-exclude
+        language: system
+        types_or: [python, pyi]
+
+      - id: pyrefly
+        name: pyrefly (strict)
+        # Run over the whole project rather than the staged files: the scope is
+        # defined by `project-includes` in pyproject.toml, and inference crosses
+        # module boundaries, so checking a subset reports errors that do not
+        # exist and misses ones that do. Passing file paths would additionally
+        # switch pyrefly into single-file mode, where it discards the
+        # configured includes and excludes altogether.
+        entry: uv run pyrefly check
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+
+      - id: decision-refs
+        name: DECISIONS cross-references
+        # Whole tree, not the staged files: a citation in one file breaks when
+        # a heading changes in another, so the pair has to be checked together.
+        entry: uv run python scripts/check_decision_refs.py
+        language: system
+        files: '\.(py|md|sh|toml|yml)$'
+        pass_filenames: false
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # A backstop for the one mistake this repository must never make.
+      # .gitignore already excludes data/, results/ and *.parquet; this
+      # catches the export format nobody thought to add to it.
+      - id: check-added-large-files
+        args: [--maxkb=512]
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace

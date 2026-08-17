@@ -1,0 +1,296 @@
+[project]
+name = "pcc-prediction-nako"
+version = "1.0.0"
+description = "Reproducible analysis pipeline for multimodal prediction of post-COVID condition (PCC) in the German National Cohort"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.14"
+authors = [
+    { name = "Claas Flint" },
+]
+keywords = [
+    "machine-learning",
+    "post-covid",
+    "nested-cross-validation",
+    "multimodal-prediction",
+    "epidemiology",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+
+dependencies = [
+    "numpy==2.5.2",
+    "pandas==3.0.5",
+    "pyarrow==25.0.1",
+    "scikit-learn==1.9.0",
+    "scipy==1.18.0",
+    "xgboost==3.4.0",
+    "matplotlib==3.11.1",
+    "seaborn==0.13.2",
+    "rich==15.0.0",
+    "tqdm==4.70.0",
+    "shap==0.52.0",
+    "statsmodels==0.14.6",
+]
+
+# Keep table headers below every key that belongs to [project]: a `[section]`
+# line ends the table above it, so a URL block placed higher would silently
+# reparent `dependencies` and the lock would resolve without them.
+[project.urls]
+Repository = "https://github.com/cl445/pcc-prediction-nako"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pcc_analysis"]
+
+# shap caps numba at <0.63 on Intel macOS only. Resolving for that platform
+# forks the lock and pins numba 0.53.1 / llvmlite 0.36.0 alongside the current
+# pair, and llvmlite 0.36.0 does not build on Python 3.14 — so the fork is not
+# an installable resolution there, only noise in the lock. Intel macOS is out
+# of scope for this project (development is arm64, CI is ubuntu), and naming
+# the supported environments collapses the fork without discarding anyone's
+# version constraints: a future numba floor from shap still resolves normally.
+[tool.uv]
+environments = ["sys_platform != 'darwin' or platform_machine != 'x86_64'"]
+
+[tool.ruff]
+line-length = 88
+indent-width = 4
+# Deliberately one version behind `requires-python`, and not to be "corrected"
+# to py314: this key steers the formatter as well as the linter, and at py314
+# the formatter strips the parentheses from multi-exception `except` clauses
+# (PEP 758). That syntax parses nowhere below 3.14 and is not yet understood by
+# every editor and type checker a reader might have. Staying at py313 costs
+# only the pyupgrade rewrites that are 3.14-exclusive, of which this tree
+# currently has none — checked with `ruff check --target-version py314`.
+target-version = "py313"
+src = ["src"]
+extend-exclude = ["data", "results"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = true
+
+[tool.ruff.lint]
+select = [
+    # --- Core (pycodestyle / pyflakes) ---
+    "F",      # pyflakes
+    "E", "W", # pycodestyle errors + warnings
+    # --- Import sorting (isort) ---
+    "I",      # isort
+    # --- Naming ---
+    "N",      # pep8-naming
+    # --- Upgrades ---
+    "UP",     # pyupgrade
+    # --- Pylint ---
+    "PL",     # pylint (PLC, PLE, PLR, PLW)
+    # --- Bug-risk / best practices ---
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "A",      # flake8-builtins
+    "SIM",    # flake8-simplify
+    "PIE",    # flake8-pie
+    "RET",    # flake8-return
+    "PERF",   # perflint
+    "FURB",   # refurb
+    # --- Exceptions ---
+    # Only the three tryceratops rules that carry semantics. TRY002/TRY003
+    # (custom exception class, message not on the class) would turn every
+    # `raise ValueError(f"...")` into a three-line ceremony for no gain.
+    "TRY004", # raise TypeError, not ValueError, on a failed isinstance check
+    "TRY300", # return belongs in `else`, outside the except's reach
+    "TRY400", # logger.exception over logger.error inside an except block
+    "RSE",    # flake8-raise (no empty parens on `raise X()`)
+    # --- Security ---
+    "S",      # flake8-bandit
+    # --- Pathlib ---
+    "PTH",    # flake8-use-pathlib
+    # --- Datetime ---
+    "DTZ",    # flake8-datetimez (naive timestamps in provenance records)
+    # --- Print / logging / debugger ---
+    "T20",    # flake8-print
+    "T10",    # flake8-debugger (no stray breakpoint() / pdb.set_trace())
+    "LOG",    # flake8-logging
+    "G",      # flake8-logging-format
+    # --- Type-checking imports ---
+    "TC",     # flake8-type-checking
+    # --- Tidy imports ---
+    "TID",    # flake8-tidy-imports
+    # --- Unused arguments ---
+    "ARG",    # flake8-unused-arguments
+    # --- Commented-out code ---
+    "ERA",    # eradicate
+    # --- Flynt (f-string conversion) ---
+    "FLY",    # flynt
+    # --- Scientific stack idiom ---
+    "PD",     # pandas-vet (.isna over .isnull, .to_numpy over .values)
+    "NPY",    # numpy-specific (no new draws from the legacy global RNG)
+    "ICN",    # flake8-import-conventions (matplotlib as mpl, etc.)
+    # --- Tests ---
+    "PT",     # flake8-pytest-style
+    # --- Suppression hygiene ---
+    # Blanket `# noqa` and blanket `# type: ignore` are what this codebase
+    # already avoids by hand -- the sklearn signature narrowings are each
+    # suppressed with their own code. PGH keeps that from eroding.
+    "PGH",    # pygrep-hooks
+    # --- Packaging / file hygiene ---
+    "INP",    # flake8-no-pep420 (no implicit namespace packages)
+    "EXE",    # flake8-executable (no shebang on a non-executable file)
+    # --- Zero-hit ratchets: nothing to fix today, enforced from here on ---
+    "ASYNC",  # flake8-async
+    "SLOT",   # flake8-slots
+    "PYI",    # flake8-pyi (applies once a .pyi stub appears)
+    # --- Ruff-specific ---
+    "RUF",    # ruff
+]
+ignore = [
+    # --- Line length handled by formatter ---
+    "E501",
+    # --- Pylint relaxations for scientific code ---
+    "PLR0913",  # too many arguments (common in ML pipelines)
+    # Same rationale as PLR0913, for the positional-argument count. Promoted
+    # to stable in ruff 0.16; the pipeline entry points it flags take their
+    # configuration as a long, explicit signature on purpose.
+    "PLR0917",  # too many positional arguments
+    "PLR2004",  # magic value in comparison (thresholds in data science)
+    "PLR0911",  # too many return statements
+    "PLR0912",  # too many branches
+    "PLR0915",  # too many statements
+    "PLC0415",  # import not at top level (conditional/lazy imports)
+    "PLW2901",  # overwriting loop variable (common in data transforms)
+    # --- Bandit relaxations ---
+    "S101",     # assert used (acceptable in scripts/analysis)
+    "S110",     # try-except-pass (sometimes needed around optional metrics)
+    "S301",     # pickle (needed for sklearn model serialization)
+    "S403",     # pickle import
+    # --- Return relaxations ---
+    "RET504",   # unnecessary assignment before return (aids readability)
+    # --- Simplify relaxations ---
+    "SIM108",   # ternary operator (multi-line if/else often clearer)
+    "SIM105",   # contextlib.suppress (explicit try/except often clearer)
+    # --- Type-checking imports ---
+    "TC002",    # move third-party import into TYPE_CHECKING (too aggressive for DS)
+    "TC003",    # move stdlib import into TYPE_CHECKING
+    # --- Unused arguments (sklearn API conformance) ---
+    "ARG002",   # unused method argument (y, transform, input_features in sklearn API)
+    # --- Commented-out code (false positives on section headers) ---
+    "ERA001",   # section-header comments misdetected as commented-out code
+    # --- Ambiguous unicode in scientific text (× − γ – ‑ etc.) ---
+    # Methods text legitimately uses U+00D7 multiplication sign, U+2212
+    # minus sign, Greek letters and en/em dashes. Flagging them as
+    # ambiguous against ASCII look-alikes is noise in this codebase.
+    "RUF001",   # ambiguous unicode in strings
+    "RUF002",   # ambiguous unicode in docstrings
+    "RUF003",   # ambiguous unicode in comments
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = [
+    "T20",    # print statements expected in scripts
+    "E402",   # imports after matplotlib backend config
+    # These are entry points invoked by path (`uv run python scripts/...`),
+    # never imported as a package, so there is no `__init__.py` to add. Ruff
+    # exempts a file with a shebang from INP001 on its own; the shebangs here
+    # were removed because they promise a bare `./script.py` would work, which
+    # it cannot -- the dependencies live in the uv environment.
+    "INP001", # scripts/ is deliberately not a package
+]
+"tests/*.py" = [
+    "S101",   # assert is expected in tests
+    "ARG001", # unused function argument (fixtures)
+]
+"smoke_test/*.py" = [
+    "T20",    # print statements expected in smoke-test tooling
+]
+
+[tool.ruff.lint.pep8-naming]
+ignore-names = [
+    "X", "y", "X_*", "y_*", "Xt", "yt",
+    "*_X", "*_y", "*_X_*", "C",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pcc_analysis"]
+combine-as-imports = true
+force-single-line = false
+
+[tool.ruff.lint.flake8-type-checking]
+runtime-evaluated-base-classes = [
+    "pydantic.BaseModel",
+]
+
+[tool.pyrefly]
+python-version = "3.14"
+project-includes = ["src/pcc_analysis", "scripts", "tests", "smoke_test"]
+preset = "strict"
+# The preset leaves the bodies of unannotated functions unchecked and infers
+# their return types. Check the bodies, and report a missing return annotation
+# rather than guessing one.
+check-unannotated-defs = true
+infer-return-types = "never"
+# Pyrefly's default `project-excludes` skips every directory whose name starts
+# with a dot. A checkout can itself sit under one -- for example a git worktree
+# below `.claude/` -- and then the entire project matches the exclude:
+# `pyrefly check` prints "No Python files matched" and exits 1, taking
+# `make typecheck`, `make check` and the pre-commit hook down with it.
+# Replacing the heuristic keeps the checked set at the files named in
+# `project-includes` wherever the clone happens to live.
+disable-project-excludes-heuristics = true
+# Ignore files are not consulted either: adding a directory to .gitignore
+# should not quietly shrink what CI type-checks.
+use-ignore-files = false
+# `.` makes `smoke_test` importable as a top-level package, `src` the
+# `pcc_analysis` package. `scripts/figures` is on the path because the
+# regenerate_* scripts import their sibling `_style` module the way the
+# interpreter resolves it at runtime -- from the script's own directory.
+search-path = [".", "src", "scripts/figures"]
+# Nothing is replaced by `Any`: every dependency, sklearn included, is
+# type-checked. `sklearn.base` describes estimators nominally through
+# BaseEstimator and TransformerMixin, while this codebase describes them
+# structurally through `protocols.py`, and the mixins' declared method
+# signatures contradict the subclasses here — `TransformerMixin.fit_transform`
+# is declared to return an ndarray, which no DataFrame-returning transformer
+# can satisfy. Blanking the module would hide that mismatch along with
+# everything else it describes, so it is carried instead as seven deliberate
+# signature narrowings, suppressed individually at the point they are made:
+# four in ConfoundedPipeline and one each in FrameTransformer, Orthogonalizer
+# and StabilitySelector.
+#
+# Pyrefly resolves sklearn against stubs bundled in its own binary rather than
+# against the installed package, and those describe an older release. A
+# parameter the installed sklearn accepts can therefore be reported as
+# unexpected, and one it has since removed can type-check and fail at runtime;
+# `make typecheck` is not a check on the pinned sklearn's own API surface.
+replace-imports-with-any = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow to run (deselect with '-m \"not slow\"')",
+]
+
+[dependency-groups]
+dev = [
+    # A pandas-stubs release is cut against one pandas version; this one
+    # matches the pinned pandas 3.0.5, and the two belong bumped together.
+    "pandas-stubs==3.0.5.260730",
+    "pre-commit==4.6.2",
+    "pyrefly==1.2.0",
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "ruff==0.16.2",
+    "types-seaborn==0.13.2.20260728",
+    "types-tqdm==4.70.0.20260805",
+]

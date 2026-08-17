@@ -1,0 +1,52 @@
+# Smoke-test configuration — fast pipeline run on synthetic data.
+# Reduced iterations for quick end-to-end validation (~3-5 min instead of
+# hours). Not scientifically meaningful; only checks that the pipeline runs.
+#
+# Generate the synthetic fixtures first with
+#   uv run python -m smoke_test generate --output-dir smoke_data
+# (the `make smoke-*` targets do this for you).
+
+[paths]
+# NAKO raw-data paths are NOT used by 02_run_pipeline.py — it reads the
+# processed parquets written by the synthetic generator. These are kept as
+# dummies only so config validation doesn't fail on missing sections.
+nako_data_dir = "/tmp/pcc_smoke_nako_dummy"
+nako_supplementary_dir = "/tmp/pcc_smoke_nako_dummy"
+nako_amendment_dir = "/tmp/pcc_smoke_nako_dummy"
+nako_baseline_subdir = "Baseline"
+nako_insurance_subdir = "Krankenkassendaten"
+
+[paths.files]
+mri1 = "export_baseline_mrt1.csv"
+mri2 = "export_baseline_mrt2.csv"
+mri3 = "export_baseline_mrt3.csv"
+kvad = "exportfile_kv_amb_diag_mapped.csv"
+sex_age = "export_baseline.csv"
+corona2 = "export_corona2.csv"
+mental_health = "export_baseline.csv"
+# Every delivery root needs an entry here, dummy or not: an unset one used to
+# resolve to the process working directory, so the `.exists()` gates that
+# decide whether the amendment processors run would have tested a bare
+# `export_baseline.csv` next to whatever the run was started from.
+amendment_baseline = "export_baseline.csv"
+followup1 = "export_followup1.csv"
+gefu1 = "export_gefu1.csv"
+corona1 = "export_corona.csv"
+
+[pipeline]
+n_outer_folds = 2
+n_inner_folds = 2
+meta_model = "gbdt"
+orthogonalize = true
+random_state = 42
+n_jobs = -1
+meta_permutation_iterations = 10
+n_bootstrap = 5
+
+[output]
+# Smoke output goes to dedicated directories so a smoke run never touches
+# (or overwrites) the real processed data and results. Both are gitignored.
+# get_processed_dir / get_results_dir join these with the project root, so
+# they must be written as relative paths.
+results_dir = "smoke_results"
+processed_dir = "smoke_data"

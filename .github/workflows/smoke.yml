@@ -1,0 +1,109 @@
+name: Smoke
+
+# End-to-end wiring check on synthetic data. This is the only executable
+# check possible in CI: the real analysis needs NAKO access, which a runner
+# does not have and must not have.
+#
+# It runs ONE pipeline configuration, not `make analysis-smoke`'s ten. The
+# single run exercises the same wiring: config loading, the processed-parquet
+# layout, the modality pipelines, orthogonalization, the meta-learner and the
+# artifact writer. On top of it come the two paths that a plain pipeline run
+# leaves untouched — applying a persisted model to the other cohort, and the
+# supplementary analyses.
+#
+# Its value is catching the class of bug that lint and tests do not see: a
+# step that reads a path nobody configured. A hard-coded data/processed in a
+# supplementary script passes every unit test and every lint rule, and fails
+# only when something runs the whole graph against a different config.
+
+# On a change, and on demand — deliberately not scheduled. Nothing here
+# changes on its own, so a run without a change to test would only burn
+# Actions minutes.
+#
+# `push` as well as `pull_request`, because the two are not interchangeable
+# across the repositories this file ships to. A release copy carries a single
+# commit and receives changes by force-push, with no pull request anywhere in
+# it: a workflow gated on `pull_request` alone would be registered there and
+# never fire, which reads like coverage and is not.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Nothing here writes anything back; the default token grant is wider than
+# that, and in a public repository the default is worth narrowing explicitly.
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Synthetic end-to-end run
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Pinned to an exact tag: setup-uv publishes no floating major tag
+      # beyond v7, so `@v10` does not resolve.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.0
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      # No config.toml is created: config_smoke.toml is passed explicitly and
+      # carries dummy raw-data paths, so nothing here touches NAKO data.
+      - name: Generate synthetic fixtures and run one pipeline configuration
+        run: make smoke-test
+
+      # Train on the MRI arm, then score the non-MRI arm from the pickle
+      # without refitting. This is the only check on the persisted-model path:
+      # final_model.pkl, the column layout captured at fit time, and the
+      # config.csv a transfer run reads back from its source.
+      - name: Apply a trained model to the other cohort
+        run: make smoke-test-transfer-nonmri-lean
+
+      # The supplementary analyses. `make supplementary` needs NAKO parquets,
+      # so nothing else exercises these between full analyses, and a
+      # dependency bump would otherwise reach them hours into a rerun. The set
+      # is derived in the Makefile by subtracting FIXTURE_CANNOT_RUN from
+      # PARQUET_SUPPLEMENTARY, which is where the exclusions are justified.
+      - name: Run the supplementary analyses on the fixtures
+        run: make smoke-supplementary
+
+      # The runs are only meaningful if they actually produced their
+      # artifacts; a step that writes nothing must not pass as green.
+      - name: Verify the runs produced artifacts
+        run: |
+          test -d smoke_data || { echo "smoke_data/ missing"; exit 1; }
+          if [ -z "$(find smoke_results -name 'predictions.csv' -print -quit)" ]; then
+            echo "no predictions.csv under smoke_results/"; exit 1
+          fi
+          if [ -z "$(find smoke_results -name 'transfer_summary.json' -print -quit)" ]; then
+            echo "no transfer_summary.json under smoke_results/"; exit 1
+          fi
+          if [ -z "$(find smoke_results -name 'e_value.json' -print -quit)" ]; then
+            echo "no supplementary constants under smoke_results/"; exit 1
+          fi
+          # Every run must be attributable to the stack that produced it.
+          if ! grep -q 'package_versions' "$(find smoke_results -name config.csv -print -quit)"; then
+            echo "config.csv carries no package_versions stamp"; exit 1
+          fi
+          echo "Smoke artifacts present."
+
+      - name: Upload smoke results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-results
+          path: smoke_results/
+          retention-days: 7
+          if-no-files-found: warn

@@ -1,0 +1,22 @@
+data/
+results/
+smoke_data/
+smoke_results/
+*.parquet
+config.toml
+__pycache__/
+*.egg-info/
+.ruff_cache/
+.pytest_cache/
+.nox/
+.coverage
+.venv/
+.DS_Store
+# Editor and agent tooling, and local working notes: not part of the pipeline
+.claude/
+.idea/
+.gitnexus/
+.playwright-mcp/
+AGENTS.md
+CLAUDE.md
+REVIEW_FINDINGS.md

@@ -1,0 +1,45 @@
+# PCC Prediction Analysis - Configuration
+#
+# Copy this file to config.toml and update the paths:
+#   cp config.toml.example config.toml
+#
+# Then edit config.toml with your actual NAKO data directory.
+
+# Three delivery roots, because NAKO ships an application's data in batches:
+# the primary export, a later supplementary one, and the amendment that added
+# the PHQ-9 items, GPAQ and the tobacco variables. Point each at the directory
+# your own delivery arrived in — the names below are placeholders, and the
+# pipeline reads nothing from them but the files listed under [paths.files].
+[paths]
+nako_data_dir = "/path/to/nako/primary-delivery"
+nako_supplementary_dir = "/path/to/nako/supplementary-delivery"
+nako_amendment_dir = "/path/to/nako/amendment-delivery"
+nako_baseline_subdir = "Baseline"
+nako_insurance_subdir = "Krankenkassendaten"
+
+[paths.files]
+mri1 = "export_baseline_mrt1.csv"
+mri2 = "export_baseline_mrt2.csv"
+mri3 = "export_baseline_mrt3.csv"
+kvad = "exportfile_kv_amb_diag_mapped.csv"
+sex_age = "export_baseline.csv"
+corona2 = "export_corona2.csv"
+mental_health = "export_baseline.csv"
+amendment_baseline = "export_baseline.csv"
+followup1 = "export_followup1.csv"
+gefu1 = "export_gefu1.csv"
+corona1 = "export_corona.csv"
+
+[pipeline]
+n_outer_folds = 10
+n_inner_folds = 5
+meta_model = "gbdt"
+orthogonalize = true
+random_state = 42
+n_jobs = -1
+meta_permutation_iterations = 1000
+n_bootstrap = 1000
+
+[output]
+results_dir = "results"
+processed_dir = "data/processed"

@@ -1,0 +1,64 @@
+name: Checks
+
+# The same gates as `make check`, on every push to main and every pull
+# request. Run here so every commit is checked whether or not the author ran
+# the hooks: a lint, format or type error is cheapest to fix on the commit
+# that introduced it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Nothing here writes anything back; the default token grant is wider than
+# that, and in a public repository the default is worth narrowing explicitly.
+permissions:
+  contents: read
+
+# A newer push to the same ref makes an in-flight run obsolete.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint, format, typecheck, tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Pinned to an exact tag: setup-uv publishes no floating major tag
+      # beyond v7, so `@v10` does not resolve.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.0
+        with:
+          enable-cache: true
+
+      # Python version comes from .python-version. Dependencies are pinned
+      # exactly in pyproject.toml, so --frozen additionally fails the run if
+      # uv.lock has drifted out of sync rather than silently re-resolving.
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: make lint
+
+      # --check, not the writing variant: CI reports the diff, the pre-commit
+      # hook is what actually formats. A runner that rewrites the tree would
+      # only be able to tell you about it afterwards.
+      - name: Format
+        run: make format-check
+
+      - name: Typecheck
+        run: make typecheck
+
+      # Every `§N.M` in the tree names a section DECISIONS.md has. The
+      # citations are plain strings, so nothing else ties them to the
+      # document: renumbering it repoints all of them at once, silently.
+      - name: DECISIONS cross-references
+        run: make check-decision-refs
+
+      - name: Tests
+        run: make test

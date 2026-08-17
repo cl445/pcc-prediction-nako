@@ -1,0 +1,51 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite it. The associated paper is named in
+  the README; add its citation here once it has a DOI.
+title: >-
+  Multimodal Prediction of Post-COVID Condition (PCC) — Analysis Pipeline
+abstract: >-
+  Reproducible analysis pipeline for multimodal prediction of post-COVID
+  condition (PCC) in the German National Cohort (NAKO): nested 10x5
+  cross-validation with per-modality base learners, stability selection,
+  DML orthogonalisation, and an XGBoost meta-learner.
+type: software
+version: 1.0.0
+license: MIT
+repository-code: https://github.com/cl445/pcc-prediction-nako
+url: https://github.com/cl445/pcc-prediction-nako
+authors:
+  - family-names: Flint
+    given-names: Claas
+    orcid: https://orcid.org/0000-0001-5164-8227
+  - family-names: Spreckelsen
+    given-names: Cord
+  - family-names: Otto
+    given-names: Christian
+  - family-names: Mikolajczyk
+    given-names: Rafael
+    orcid: https://orcid.org/0000-0003-1271-7204
+  - family-names: Frost
+    given-names: Jonas
+    orcid: https://orcid.org/0009-0007-2068-5958
+  - family-names: Claaß
+    given-names: Luise Victoria
+  - family-names: Fasshauer
+    given-names: Jonathan Mathias
+    orcid: https://orcid.org/0009-0002-1540-6102
+  - family-names: Scholz
+    given-names: Markus
+    orcid: https://orcid.org/0000-0002-4059-1779
+  - family-names: Buschmann
+    given-names: Laura
+    orcid: https://orcid.org/0000-0002-8389-1253
+  - family-names: Rübsamen
+    given-names: Nicole
+    orcid: https://orcid.org/0000-0003-2198-5577
+  - family-names: Wright
+    given-names: Marvin N.
+    orcid: https://orcid.org/0000-0002-8542-6291
+  - name: NAKO Investigators
+  - family-names: Opel
+    given-names: Nils
+    orcid: https://orcid.org/0000-0003-4749-3298
