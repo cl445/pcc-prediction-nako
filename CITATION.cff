@@ -10,7 +10,7 @@ abstract: >-
   cross-validation with per-modality base learners, stability selection,
   DML orthogonalisation, and an XGBoost meta-learner.
 type: software
-version: 1.0.0
+version: 1.1.0
 license: MIT
 repository-code: https://github.com/cl445/pcc-prediction-nako
 url: https://github.com/cl445/pcc-prediction-nako
@@ -20,8 +20,10 @@ authors:
     orcid: https://orcid.org/0000-0001-5164-8227
   - family-names: Spreckelsen
     given-names: Cord
+    orcid: https://orcid.org/0000-0002-7301-1566
   - family-names: Otto
     given-names: Christian
+    orcid: https://orcid.org/0000-0003-0226-3608
   - family-names: Mikolajczyk
     given-names: Rafael
     orcid: https://orcid.org/0000-0003-1271-7204
@@ -45,7 +47,53 @@ authors:
   - family-names: Wright
     given-names: Marvin N.
     orcid: https://orcid.org/0000-0002-8542-6291
-  - name: NAKO Investigators
+  - family-names: Burk
+    given-names: Lukas
+    orcid: https://orcid.org/0000-0001-7528-3795
+  - family-names: Bamberg
+    given-names: Fabian
+    orcid: https://orcid.org/0000-0002-7460-3942
+  - family-names: Schlett
+    given-names: Christopher L.
+    orcid: https://orcid.org/0000-0002-1576-1481
+  - family-names: Niendorf
+    given-names: Thoralf
+    orcid: https://orcid.org/0000-0001-7584-6527
+  - family-names: Forsting
+    given-names: Michael
+  - family-names: Li
+    given-names: Yan
+  - family-names: Steindorf
+    given-names: Karen
+    orcid: https://orcid.org/0000-0001-5215-5651
+  - family-names: Karrasch
+    given-names: Stefan
+    orcid: https://orcid.org/0000-0001-9807-2915
+  - family-names: Leitzmann
+    given-names: Michael
+    orcid: https://orcid.org/0000-0002-0371-2789
+  - family-names: Haug
+    given-names: Stefan
+    orcid: https://orcid.org/0000-0001-6853-4509
+  - family-names: Bärnighausen
+    given-names: Till W.
+    orcid: https://orcid.org/0000-0002-4182-4212
+  - family-names: Schmidt
+    given-names: Börge
+  - family-names: Harries
+    given-names: Manuela
+    orcid: https://orcid.org/0000-0001-5238-0103
+  - family-names: Melhorn
+    given-names: Vanessa
+    orcid: https://orcid.org/0000-0002-5329-8758
+  - family-names: Krist
+    given-names: Lilian
+  - family-names: Keil
+    given-names: Thomas
+    orcid: https://orcid.org/0000-0002-9108-3360
+  - family-names: Peters
+    given-names: Annette
+    orcid: https://orcid.org/0000-0001-6645-0985
   - family-names: Opel
     given-names: Nils
     orcid: https://orcid.org/0000-0003-4749-3298

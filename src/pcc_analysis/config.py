@@ -201,6 +201,20 @@ class NAKOPaths:
         )
 
     @property
+    def primary_followup1_csv(self) -> Path:
+        """FU1 export of the primary delivery, kept for its ``basis_age``.
+
+        The two deliveries carry the same FU1 file name but not the same
+        columns. The supplementary one (:attr:`followup1_csv`) covers more
+        participants and is what every measurement processor reads; it has
+        no age or date field. The primary one carries ``basis_age`` at the
+        FU1 visit for a subset of participants, which is the only anchor in
+        our data access that dates the FU1 examination. Used by
+        ``process_followup1_visit_meta`` for the reconstructed visit year.
+        """
+        return self.base_dir / self._files.get("followup1", "export_followup1.csv")
+
+    @property
     def gefu1_csv(self) -> Path:
         """Path to the general follow-up 1 (GEFU1) questionnaire export.
 

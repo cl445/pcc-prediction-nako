@@ -1,6 +1,6 @@
 # Multimodal Prediction of Post-COVID Condition (PCC)
 
-Reproducible analysis pipeline for the paper: *"Pre-Infection Mental Health, but Not Brain Volumetry, Predicts Post-COVID Condition: A Population-Based Cohort Study in the German National Cohort (NAKO)"*
+Reproducible analysis pipeline for the paper: *"Pre-Infection Mental Health, but Not Brain Volumetry, Predicts Risk of Post-COVID Condition: A Population-Based Cohort Study in the German National Cohort (NAKO)"*
 
 ## Overview
 
@@ -11,7 +11,7 @@ This repository contains the complete analysis pipeline that:
 3. **Generates** all paper figures (evaluation curves, decision curve analysis, modality contributions)
 4. **Computes** descriptive statistics and LaTeX tables
 
-The primary PCC outcome is the **Bahmer weighted post-COVID syndrome score** (Bahmer et al. 2022) binarised at `> 10.75`. The central question is a *second-hit* test: whether pre-infection structural brain MRI adds predictive value over demographics, medical history, laboratory values, and baseline psychometric phenotype.
+The primary PCC outcome is the **Bahmer weighted post-COVID syndrome score** (Bahmer et al. 2022) binarised at `> 10.75`. The central question is one of prediction: whether pre-infection structural brain MRI and baseline mental health predict PCC among the infected, and how each compares against demographics, medical history, laboratory values, and the remaining baseline modalities. The second-hit hypothesis motivates the comparison; its defining vulnerability-by-infection interaction is not identifiable in this design and is not tested here.
 
 ## Requirements
 
@@ -316,6 +316,24 @@ it cannot drift from what actually runs. This is the only executable check
 possible on a runner, since the real analysis needs NAKO access. The Python
 version is pinned in `.python-version`; dependencies are pinned exactly in
 `pyproject.toml` and installed from `uv.lock` with `uv sync --frozen`.
+
+## Where the reasoning lives
+
+Three documents, and they answer different questions:
+
+- **`DECISIONS.md`** — every methodological and technical decision in the
+  pipeline, with the rationale and, where one exists, the measurement behind
+  it. Ordered by pipeline stage. The code cites it by section number, and
+  `make check` verifies that every citation resolves.
+- **`docs/preprocessing.md`** — what happens to each variable between the raw
+  NAKO export and the model: sentinel handling, derived columns, the encoding
+  of every questionnaire block.
+- **`docs/classifier_configuration.md`** — the per-modality base learners,
+  their penalties and solvers, and why each is set the way it is.
+
+Start with `DECISIONS.md` if you want to know *why* something is the way it
+is, and with `docs/` if you want to know *what* the pipeline does to a
+particular variable.
 
 ## Repository Structure
 

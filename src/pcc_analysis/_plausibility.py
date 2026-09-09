@@ -138,20 +138,23 @@ LIPASE_UKAT_PER_L_RANGE: tuple[float, float] = (0.05, 200.0)
 # Sniffin'-Sticks olfactometry (NAKO 12-item screening form)
 # ---------------------------------------------------------------------------
 # NAKO-882 administers the 12-item Sniffin'-Sticks identification screening
-# (Hummel 2001), not the full 48-point TDI battery. The sum score is 0..12;
-# anosmia is indicated at sum <= 6 (downstream clinical derivation).
+# (Hummel 2001), not the full 48-point TDI battery. Both sum variants run
+# 0..12 and differ only in how the sixth pen is scored. A zero is a valid
+# value here but is almost never a real result; see the coding notes in
+# ``data_processing/followup1.py`` for the rows it actually marks.
 OLF_IDENTIFICATION_SUM_RANGE: tuple[float, float] = (0.0, 12.0)
-# Free-identification count (which odours the participant named without cueing)
-# is bounded by the test design.
-OLF_FREE_IDENTIFICATION_RANGE: tuple[float, float] = (0.0, 10.0)
-# Category-identification items (multi-choice answer).
-OLF_CATEGORY_IDENTIFICATION_RANGE: tuple[float, float] = (0.0, 3.0)
+# Nasal patency at the time of the test, 1 "völlig frei" .. 10 "völlig
+# verstopft". Not an identification count.
+OLF_NASAL_PATENCY_RANGE: tuple[float, float] = (1.0, 10.0)
+# NAKO's own olfactory-function classification: 1 normosmia, 2 hyposmia,
+# 3 anosmia (7777 "not computable" is swept as a sentinel).
+OLF_FUNCTION_CATEGORY_RANGE: tuple[float, float] = (1.0, 3.0)
 # Administration method code (test-type identifier).
 OLF_METHOD_CODE_RANGE: tuple[float, float] = (1.0, 2.0)
-# Cold on the test day: binary 0/1.
+# Cold within the past six weeks: binary 0/1 (9 "keine Angabe" -> NA).
 OLF_COLD_RANGE: tuple[float, float] = (0.0, 1.0)
-# Normosmia pass/fail derived by the exam software: binary 0/1.
-OLF_NORMOSMIA_PASS_RANGE: tuple[float, float] = (0.0, 1.0)
+# Normosmia yes/no derived by the exam software: binary 0/1.
+OLF_NORMOSMIA_RANGE: tuple[float, float] = (0.0, 1.0)
 
 # ---------------------------------------------------------------------------
 # Objective sleep (SOMNOwatch — "brief" export values are in hours)
@@ -334,12 +337,12 @@ ACUTE_INFECTION_RANGES: dict[str, tuple[float, float]] = {
 
 OLFACTOMETRY_RANGES: dict[str, tuple[float, float]] = {
     "olf_identification_sum": OLF_IDENTIFICATION_SUM_RANGE,
-    "olf_identification_result": OLF_IDENTIFICATION_SUM_RANGE,
-    "olf_free_identification": OLF_FREE_IDENTIFICATION_RANGE,
-    "olf_category_identification": OLF_CATEGORY_IDENTIFICATION_RANGE,
+    "olf_identification_sum_lenient": OLF_IDENTIFICATION_SUM_RANGE,
+    "olf_nasal_patency": OLF_NASAL_PATENCY_RANGE,
+    "olf_function_category": OLF_FUNCTION_CATEGORY_RANGE,
     "olf_method_code": OLF_METHOD_CODE_RANGE,
-    "olf_cold_on_test_day": OLF_COLD_RANGE,
-    "olf_normosmia_pass": OLF_NORMOSMIA_PASS_RANGE,
+    "olf_cold_recent": OLF_COLD_RANGE,
+    "olf_normosmia": OLF_NORMOSMIA_RANGE,
 }
 
 SLEEP_OBJECTIVE_RANGES: dict[str, tuple[float, float]] = {
@@ -386,10 +389,19 @@ FU1_MARKERS_MISC_RANGES: dict[str, tuple[float, float]] = {
 # are treated as implausible (likely data-entry errors).
 VISIT_META_YEARS_SINCE_BASELINE_RANGE: tuple[float, float] = (0.0, 12.0)
 
+# Calendar year of the FU1 examination, reconstructed from the baseline
+# visit year plus the baseline-to-FU1 age difference. NAKO baseline ran
+# 2014..2019 and FU1 follows it by 3..8 years, so anything outside this
+# window indicates an inconsistent age pair rather than a late visit.
+VISIT_META_FU1_YEAR_RANGE: tuple[float, float] = (2014.0, 2026.0)
+
 FOLLOWUP1_VISIT_META_RANGES: dict[str, tuple[float, float]] = {
     "baseline_age": AGE_YEARS_RANGE,
     "gefu1_age_proxy": AGE_YEARS_RANGE,
     "years_since_baseline_proxy": VISIT_META_YEARS_SINCE_BASELINE_RANGE,
+    "fu1_age": AGE_YEARS_RANGE,
+    "years_baseline_to_fu1": VISIT_META_YEARS_SINCE_BASELINE_RANGE,
+    "fu1_year_reconstructed": VISIT_META_FU1_YEAR_RANGE,
 }
 
 # ---------------------------------------------------------------------------

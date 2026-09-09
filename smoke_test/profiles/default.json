@@ -9153,9 +9153,9 @@
       }
     },
     "followup1_olfactometry": {
-      "systematic_missing_frac": 0.242,
+      "systematic_missing_frac": 0.374,
       "columns": {
-        "olf_free_identification": {
+        "olf_nasal_patency": {
           "dtype": "integer",
           "pandas_dtype": "UInt8",
           "mean": 2.36,
@@ -9167,7 +9167,7 @@
           "q99": 7.0,
           "missing_frac": 0.382
         },
-        "olf_category_identification": {
+        "olf_function_category": {
           "dtype": "integer",
           "pandas_dtype": "UInt8",
           "mean": 1.19,
@@ -9191,24 +9191,24 @@
           "q99": 2.0,
           "missing_frac": 0.382
         },
-        "olf_normosmia_pass": {
+        "olf_normosmia": {
           "dtype": "boolean",
           "true_frac": 0.832,
           "missing_frac": 0.391
         },
-        "olf_identification_result": {
+        "olf_identification_sum_lenient": {
           "dtype": "integer",
           "pandas_dtype": "UInt8",
-          "mean": 8.5,
-          "std": 4.42,
-          "q01": 0.0,
-          "q25": 8.0,
+          "mean": 10.6,
+          "std": 1.49,
+          "q01": 5.0,
+          "q25": 10.0,
           "q50": 11.0,
-          "q75": 11.0,
+          "q75": 12.0,
           "q99": 12.0,
-          "missing_frac": 0.242
+          "missing_frac": 0.391
         },
-        "olf_cold_on_test_day": {
+        "olf_cold_recent": {
           "dtype": "boolean",
           "true_frac": 0.248,
           "missing_frac": 0.384
@@ -9216,19 +9216,24 @@
         "olf_identification_sum": {
           "dtype": "integer",
           "pandas_dtype": "UInt8",
-          "mean": 8.16,
-          "std": 4.28,
-          "q01": 0.0,
-          "q25": 8.0,
+          "mean": 10.2,
+          "std": 1.54,
+          "q01": 5.0,
+          "q25": 9.0,
           "q50": 10.0,
           "q75": 11.0,
           "q99": 12.0,
-          "missing_frac": 0.242
+          "missing_frac": 0.391
         },
         "olf_hyposmia_flag": {
           "dtype": "boolean",
-          "true_frac": 0.221,
-          "missing_frac": 0.242
+          "true_frac": 0.168,
+          "missing_frac": 0.391
+        },
+        "olf_anosmia_flag": {
+          "dtype": "boolean",
+          "true_frac": 0.023,
+          "missing_frac": 0.391
         }
       }
     },
@@ -9259,6 +9264,18 @@
           "q99": 72.0,
           "missing_frac": 0.067
         },
+        "fu1_age": {
+          "dtype": "integer",
+          "pandas_dtype": "UInt8",
+          "mean": 55.2,
+          "std": 12.0,
+          "q01": 27.0,
+          "q25": 48.0,
+          "q50": 56.0,
+          "q75": 65.0,
+          "q99": 75.0,
+          "missing_frac": 0.561
+        },
         "years_since_baseline_proxy": {
           "dtype": "integer",
           "pandas_dtype": "UInt8",
@@ -9270,6 +9287,30 @@
           "q75": 3.0,
           "q99": 4.0,
           "missing_frac": 0.067
+        },
+        "years_baseline_to_fu1": {
+          "dtype": "integer",
+          "pandas_dtype": "UInt8",
+          "mean": 4.46,
+          "std": 0.661,
+          "q01": 3.0,
+          "q25": 4.0,
+          "q50": 4.0,
+          "q75": 5.0,
+          "q99": 6.0,
+          "missing_frac": 0.561
+        },
+        "fu1_year_reconstructed": {
+          "dtype": "integer",
+          "pandas_dtype": "UInt16",
+          "mean": 2020.0,
+          "std": 1.02,
+          "q01": 2020.0,
+          "q25": 2020.0,
+          "q50": 2020.0,
+          "q75": 2020.0,
+          "q99": 2020.0,
+          "missing_frac": 0.561
         }
       }
     },
