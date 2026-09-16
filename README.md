@@ -430,8 +430,20 @@ the ethics committees of the participating institutions.
 ## Citation
 
 If you use this software, please cite both the software and the associated
-paper. `CITATION.cff` carries the machine-readable metadata; GitHub renders it
-under "Cite this repository".
+preprint. `CITATION.cff` carries the machine-readable metadata; GitHub renders
+it under "Cite this repository".
+
+Flint C, Spreckelsen C, Otto C, Mikolajczyk R, Frost J, Claaß LV, Fasshauer JM,
+Scholz M, Buschmann L, Rübsamen N, Wright MN, Burk L, Bamberg F, Schlett CL,
+Niendorf T, Forsting M, Li Y, Steindorf K, Karrasch S, Leitzmann M, Haug S,
+Bärnighausen TW, Schmidt B, Harries M, Melhorn V, Krist L, Keil T, Peters A,
+Opel N. Pre-Infection Mental Health, but Not Brain Volumetry, Predicts Risk of
+Post-COVID Condition: A Population-Based Cohort Study in the German National
+Cohort (NAKO). medRxiv 2026.09.09.26362611 [Preprint]. Posted 2026-09-10.
+https://doi.org/10.64898/2026.09.09.26362611
+
+The code behind that preprint is tagged `v1.1.0` in this repository.
+
 
 ## License
 

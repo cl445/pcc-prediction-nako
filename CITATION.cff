@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: >-
-  If you use this software, please cite it. The associated paper is named in
-  the README; add its citation here once it has a DOI.
+  If you use this software, please cite both the software (this file) and
+  the associated preprint (preferred-citation below).
 title: >-
   Multimodal Prediction of Post-COVID Condition (PCC) — Analysis Pipeline
 abstract: >-
@@ -12,6 +12,10 @@ abstract: >-
 type: software
 version: 1.1.0
 license: MIT
+identifiers:
+  - type: doi
+    value: 10.64898/2026.09.09.26362611
+    description: The medRxiv preprint this pipeline underlies (version 1, posted 2026-09-10)
 repository-code: https://github.com/cl445/pcc-prediction-nako
 url: https://github.com/cl445/pcc-prediction-nako
 authors:
@@ -97,3 +101,97 @@ authors:
   - family-names: Opel
     given-names: Nils
     orcid: https://orcid.org/0000-0003-4749-3298
+preferred-citation:
+  type: article
+  title: >-
+    Pre-Infection Mental Health, but Not Brain Volumetry, Predicts Risk of Post-COVID Condition: A Population-Based Cohort Study in the German National Cohort (NAKO)
+  journal: medRxiv
+  year: 2026
+  month: 9
+  doi: 10.64898/2026.09.09.26362611
+  url: https://doi.org/10.64898/2026.09.09.26362611
+  notes: Preprint, version 1, posted 2026-09-10, not peer reviewed
+  license: CC-BY-4.0
+  authors:
+    - family-names: Flint
+      given-names: Claas
+      orcid: https://orcid.org/0000-0001-5164-8227
+    - family-names: Spreckelsen
+      given-names: Cord
+      orcid: https://orcid.org/0000-0002-7301-1566
+    - family-names: Otto
+      given-names: Christian
+      orcid: https://orcid.org/0000-0003-0226-3608
+    - family-names: Mikolajczyk
+      given-names: Rafael
+      orcid: https://orcid.org/0000-0003-1271-7204
+    - family-names: Frost
+      given-names: Jonas
+      orcid: https://orcid.org/0009-0007-2068-5958
+    - family-names: Claaß
+      given-names: Luise Victoria
+    - family-names: Fasshauer
+      given-names: Jonathan Mathias
+      orcid: https://orcid.org/0009-0002-1540-6102
+    - family-names: Scholz
+      given-names: Markus
+      orcid: https://orcid.org/0000-0002-4059-1779
+    - family-names: Buschmann
+      given-names: Laura
+      orcid: https://orcid.org/0000-0002-8389-1253
+    - family-names: Rübsamen
+      given-names: Nicole
+      orcid: https://orcid.org/0000-0003-2198-5577
+    - family-names: Wright
+      given-names: Marvin N.
+      orcid: https://orcid.org/0000-0002-8542-6291
+    - family-names: Burk
+      given-names: Lukas
+      orcid: https://orcid.org/0000-0001-7528-3795
+    - family-names: Bamberg
+      given-names: Fabian
+      orcid: https://orcid.org/0000-0002-7460-3942
+    - family-names: Schlett
+      given-names: Christopher L.
+      orcid: https://orcid.org/0000-0002-1576-1481
+    - family-names: Niendorf
+      given-names: Thoralf
+      orcid: https://orcid.org/0000-0001-7584-6527
+    - family-names: Forsting
+      given-names: Michael
+    - family-names: Li
+      given-names: Yan
+    - family-names: Steindorf
+      given-names: Karen
+      orcid: https://orcid.org/0000-0001-5215-5651
+    - family-names: Karrasch
+      given-names: Stefan
+      orcid: https://orcid.org/0000-0001-9807-2915
+    - family-names: Leitzmann
+      given-names: Michael
+      orcid: https://orcid.org/0000-0002-0371-2789
+    - family-names: Haug
+      given-names: Stefan
+      orcid: https://orcid.org/0000-0001-6853-4509
+    - family-names: Bärnighausen
+      given-names: Till W.
+      orcid: https://orcid.org/0000-0002-4182-4212
+    - family-names: Schmidt
+      given-names: Börge
+    - family-names: Harries
+      given-names: Manuela
+      orcid: https://orcid.org/0000-0001-5238-0103
+    - family-names: Melhorn
+      given-names: Vanessa
+      orcid: https://orcid.org/0000-0002-5329-8758
+    - family-names: Krist
+      given-names: Lilian
+    - family-names: Keil
+      given-names: Thomas
+      orcid: https://orcid.org/0000-0002-9108-3360
+    - family-names: Peters
+      given-names: Annette
+      orcid: https://orcid.org/0000-0001-6645-0985
+    - family-names: Opel
+      given-names: Nils
+      orcid: https://orcid.org/0000-0003-4749-3298
