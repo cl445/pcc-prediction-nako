@@ -443,7 +443,8 @@ Cohort (NAKO). medRxiv 2026.09.09.26362611 [Preprint]. Posted 2026-09-10.
 https://doi.org/10.64898/2026.09.09.26362611
 
 Version 1 of the preprint was produced with the code tagged `v1.1.0` in this
-repository, version 2 with `v1.2.0`.
+repository, version 2 with `v1.2.0`. `v1.2.1` changes only the synthetic
+smoke-test data and the guards around it; the analysis results are identical.
 
 ## License
 

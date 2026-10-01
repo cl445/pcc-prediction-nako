@@ -49,6 +49,11 @@ class IntegerColumnProfile(_NumericStats):
 
     dtype: Literal["integer"]
     pandas_dtype: str
+    # Frequencies of the column's values, for integer codes such as the study
+    # centre: a normal draw over codes yields dozens of distinct "centres" in
+    # a small synthetic sample, and a model with one dummy per centre is then
+    # singular. When present, the generator samples these codes instead.
+    codes: NotRequired[dict[str, float]]
 
 
 class BooleanColumnProfile(_ColumnProfileCommon):

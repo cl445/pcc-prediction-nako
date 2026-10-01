@@ -36,7 +36,7 @@ SMOKE_SUPPLEMENTARY := $(filter-out $(FIXTURE_CANNOT_RUN),$(PARQUET_SUPPLEMENTAR
 .PHONY: all analysis analysis-smoke check-paper check-runs data pipeline figures statistics supplementary \
         lint format format-check fix test typecheck check check-decision-refs \
         smoke-data smoke-test smoke-test-mri-lean smoke-test-nonmri-lean \
-        smoke-test-transfer-nonmri-lean smoke-test-all smoke-supplementary clean
+        smoke-test-transfer-nonmri-lean smoke-test-all smoke-supplementary clean clean-smoke
 
 # -- Full analysis -----------------------------------------------------------
 
@@ -193,5 +193,23 @@ smoke-supplementary: smoke-data
 
 # -- Cleanup -----------------------------------------------------------------
 
+# Synthetic smoke fixtures and their outputs only; safe at any time.
+clean-smoke:
+	rm -rf smoke_results/ smoke_data/
+
+# DANGER: results/ and data/processed/ are not under version control. They
+# hold every analysis run (days of compute on the workstations), the
+# archived earlier runs and the processed NAKO parquets; deleting them
+# cannot be undone from git. The target therefore refuses unless the
+# deletion is asked for by name: make clean CONFIRM=delete-results
 clean:
+ifneq ($(CONFIRM),delete-results)
+	@echo "WARNING: 'make clean' deletes results/ and data/processed/ as well as"
+	@echo "the smoke directories. Neither is in git; a rerun takes days."
+	@du -sh results/ data/processed/ 2>/dev/null | sed 's/^/  would delete: /' || true
+	@echo "For the smoke fixtures only:  make clean-smoke"
+	@echo "To really delete everything:  make clean CONFIRM=delete-results"
+	@exit 1
+else
 	rm -rf results/ data/processed/ smoke_results/ smoke_data/
+endif

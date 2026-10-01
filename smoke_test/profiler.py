@@ -77,6 +77,13 @@ DERIVATION_GROUPS: dict[str, dict[str, list[str]]] = {
     },
 }
 
+# Integer columns that hold codes rather than quantities. They are profiled by
+# the frequency of each code, so synthetic data carry the real number of
+# categories (the study centre has 21 codes, not a spread around 63).
+CODED_COLUMNS: dict[str, list[str]] = {
+    "demographics": ["basis_uort"],
+}
+
 # Columns derived deterministically from other columns — profiled but
 # regenerated from source columns during generation.
 DERIVED_COLUMNS: dict[str, list[str]] = {
@@ -317,6 +324,7 @@ def extract_profile(input_dir: Path) -> Profile:
 
         df = pd.read_parquet(path)
         derived = set(DERIVED_COLUMNS.get(name, []))
+        coded = set(CODED_COLUMNS.get(name, []))
         groups = DERIVATION_GROUPS.get(name, {})
         group_cols = {c for cols in groups.values() for c in cols}
 
@@ -326,6 +334,13 @@ def extract_profile(input_dir: Path) -> Profile:
                 continue
             # Mark derived and group membership
             profile = _profile_column(df[col])
+            if col in coded and profile["dtype"] == "integer":
+                counts = df[col].dropna().value_counts(normalize=True).sort_index()
+                codes = counts.index.astype("int64")
+                profile["codes"] = {
+                    str(code): _round_fraction(float(share))
+                    for code, share in zip(codes, counts.to_numpy(), strict=True)
+                }
             if col in derived:
                 profile["derived"] = True
             if col in group_cols:

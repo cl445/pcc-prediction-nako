@@ -10,7 +10,7 @@ abstract: >-
   cross-validation with per-modality base learners, DML orthogonalisation,
   and an XGBoost meta-learner.
 type: software
-version: 1.2.0
+version: 1.2.1
 license: MIT
 identifiers:
   - type: doi

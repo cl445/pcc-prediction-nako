@@ -45,7 +45,7 @@ from sklearn.metrics import roc_auc_score
 
 from pcc_analysis.config import get_paper_constants_dir
 from pcc_analysis.data_manager import load_pipeline_data
-from pcc_analysis.sensitivity import composite_mh_positive
+from pcc_analysis.sensitivity import composite_mh_positive, fit_logit, is_estimable
 
 console = Console()
 
@@ -75,6 +75,21 @@ def _or_ci_p(result: Any, name: str) -> tuple[float, float, float, float]:
     )
 
 
+def _fit_logit(y: pd.Series, design: pd.DataFrame) -> Any | None:
+    """Logistic fit with intercept, or ``None`` when the sample cannot identify it.
+
+    :func:`fit_logit` already turns a singular design into ``None``; a fit
+    that separates or does not converge comes back with a warning, and is
+    dropped here as well, so no odds ratio is read off it. A sample too thin
+    to carry the centre dummies is then reported as not estimable instead of
+    taking down the supplementary steps that run after this one.
+    """
+    result = fit_logit(y, design)
+    if result is None or not is_estimable(result):
+        return None
+    return result
+
+
 def fit_interaction(
     y: pd.Series, exposure: pd.Series, conf: pd.DataFrame
 ) -> dict[str, Any]:
@@ -94,7 +109,6 @@ def fit_interaction(
     X["mh_x_female"] = X["mh_positive"] * X["female"]
     X["age"] = age.to_numpy()
     X = pd.concat([X, center], axis=1)
-    X = sm.add_constant(X, has_constant="add")
 
     # Fit full and reduced (no interaction) on the *identical* row set so the
     # likelihood-ratio test is valid.
@@ -103,8 +117,19 @@ def fit_interaction(
     X_full = data.drop(columns=["y"])
     X_red = X_full.drop(columns=["mh_x_female"])
 
-    full = sm.Logit(y_clean, X_full).fit(disp=False)
-    reduced = sm.Logit(y_clean, X_red).fit(disp=False)
+    full = _fit_logit(y_clean, X_full)
+    reduced = _fit_logit(y_clean, X_red)
+    if full is None or reduced is None:
+        return {
+            "n": len(y_clean),
+            "mh_main_effect_or_in_males": {"point": None, "ci_95": None},
+            "interaction_or_female_vs_male": {
+                "point": None,
+                "ci_95": None,
+                "wald_p": None,
+            },
+            "likelihood_ratio_test": {"chi2_df1": None, "p_value": None},
+        }
 
     lr_stat = float(2.0 * (full.llf - reduced.llf))
     lr_p = float(stats.chi2.sf(lr_stat, df=1))
@@ -139,23 +164,22 @@ def fit_stratum(
     X["mh_positive"] = ee.to_numpy()
     X["age"] = age.to_numpy()
     X = pd.concat([X, center], axis=1)
-    X = sm.add_constant(X, has_constant="add")
     # Drop centre dummies that are all-zero within this stratum (avoid singular).
     X = X.loc[:, (X != 0).any(axis=0)]
 
     data = pd.concat([yy.rename("y"), X], axis=1).dropna()
-    fit = sm.Logit(data["y"], data.drop(columns=["y"])).fit(disp=False)
-    or_, lo, hi, p = _or_ci_p(fit, "mh_positive")
+    fit = _fit_logit(data["y"], data.drop(columns=["y"]))
+    odds_ratio: dict[str, Any] = {"point": None, "ci_95": None, "p_value": None}
+    if fit is not None:
+        or_, lo, hi, p = _or_ci_p(fit, "mh_positive")
+        odds_ratio = {"point": or_, "ci_95": [lo, hi], "p_value": p}
 
-    n = len(data)
-    n_exposed = int(data["mh_positive"].sum())
-    n_outcome = int(data["y"].sum())
     return {
-        "n": n,
-        "n_mh_positive": n_exposed,
-        "n_pcc": n_outcome,
+        "n": len(data),
+        "n_mh_positive": int(data["mh_positive"].sum()),
+        "n_pcc": int(data["y"].sum()),
         "prevalence_pcc": float(data["y"].mean()),
-        "odds_ratio": {"point": or_, "ci_95": [lo, hi], "p_value": p},
+        "odds_ratio": odds_ratio,
     }
 
 
@@ -196,6 +220,19 @@ def demographics_decomposition(y: pd.Series, conf: pd.DataFrame) -> dict[str, An
             "univariable_or_per_10y": _univariable_or(age, scale=10.0),
         },
     }
+
+
+def _fmt_or(
+    estimate: dict[str, Any], p_key: str | None = None, p_label: str = "p"
+) -> str:
+    """``OR [lo, hi] (p=...)`` for the console table, or a note when unfitted."""
+    if estimate["point"] is None:
+        return "not estimable"
+    lo, hi = estimate["ci_95"]
+    text = f"{estimate['point']:.2f} [{lo:.2f}, {hi:.2f}]"
+    if p_key is not None:
+        text += f" ({p_label}={estimate[p_key]:.2g})"
+    return text
 
 
 def main() -> None:
@@ -269,26 +306,21 @@ def main() -> None:
     lrt = interaction["likelihood_ratio_test"]
     mm = interaction["mh_main_effect_or_in_males"]
     tbl.add_row("N (interaction model)", f"{interaction['n']}")
+    tbl.add_row("MH OR in males (main effect)", _fmt_or(mm))
     tbl.add_row(
-        "MH OR in males (main effect)",
-        f"{mm['point']:.2f} [{mm['ci_95'][0]:.2f}, {mm['ci_95'][1]:.2f}]",
+        "Interaction OR (female/male)", _fmt_or(im, p_key="wald_p", p_label="Wald p")
     )
     tbl.add_row(
-        "Interaction OR (female/male)",
-        f"{im['point']:.2f} [{im['ci_95'][0]:.2f}, {im['ci_95'][1]:.2f}] (Wald p={im['wald_p']:.2g})",
+        "LR test (df=1)",
+        "not estimable"
+        if lrt["chi2_df1"] is None
+        else f"chi2={lrt['chi2_df1']:.2f}, p={lrt['p_value']:.2g}",
     )
-    tbl.add_row("LR test (df=1)", f"chi2={lrt['chi2_df1']:.2f}, p={lrt['p_value']:.2g}")
     tbl.add_section()
-    fo = female["odds_ratio"]
-    mo = male["odds_ratio"]
     tbl.add_row(
-        f"MH OR | female (n={female['n']})",
-        f"{fo['point']:.2f} [{fo['ci_95'][0]:.2f}, {fo['ci_95'][1]:.2f}] (p={fo['p_value']:.2g})",
+        f"MH OR | female (n={female['n']})", _fmt_or(female["odds_ratio"], "p_value")
     )
-    tbl.add_row(
-        f"MH OR | male (n={male['n']})",
-        f"{mo['point']:.2f} [{mo['ci_95'][0]:.2f}, {mo['ci_95'][1]:.2f}] (p={mo['p_value']:.2g})",
-    )
+    tbl.add_row(f"MH OR | male (n={male['n']})", _fmt_or(male["odds_ratio"], "p_value"))
     tbl.add_section()
     sx = demo["sex_female"]
     ag = demo["age"]

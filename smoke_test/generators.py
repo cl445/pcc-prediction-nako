@@ -94,6 +94,13 @@ def _generate_column(
         )
         return pd.Series(values, name=col_name)
 
+    if col_profile["dtype"] == "integer" and "codes" in col_profile:
+        codes = col_profile["codes"]
+        labels = np.array([int(k) for k in codes], dtype=np.int64)
+        probs = np.array(list(codes.values()), dtype=np.float64)
+        values = rng.choice(labels, size=n, p=probs / probs.sum())
+        return pd.Series(values, name=col_name, dtype=col_profile["pandas_dtype"])
+
     if col_profile["dtype"] == "integer":
         std = max(col_profile["std"], 1e-9)
         drawn = rng.normal(col_profile["mean"], std, size=n).clip(
