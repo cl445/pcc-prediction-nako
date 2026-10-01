@@ -54,18 +54,19 @@ def _extract_physical_activity(df: DataFrame) -> DataFrame:
     # Occupational activity
     r["occupational_activity_level"] = df["a_quap_beruf"]
 
-    # Household (minutes per week, no MET equivalent)
-    r["household_minutes_week"] = df["a_quap_hausarbeit"]
+    # Household work, minutes per day averaged over the week (no MET
+    # equivalent). The QUAP durations below are minutes per day as well.
+    r["household_minutes_day"] = df["a_quap_hausarbeit"]
 
-    # Active transportation (minutes per week, no MET equivalent)
+    # Active transportation (minutes per day, no MET equivalent)
     r["active_transport_summer"] = df["a_quap_fortbew_so"]
     r["active_transport_winter"] = df["a_quap_fortbew_wi"]
 
-    # Walking (minutes per week, no MET equivalent)
+    # Walking (minutes per day, no MET equivalent)
     r["walking_summer"] = df["a_quap_spazier_so"]
     r["walking_winter"] = df["a_quap_spazier_wi"]
 
-    # Cycling leisure (minutes per week, no MET equivalent)
+    # Cycling leisure (minutes per day, no MET equivalent)
     r["cycling_summer"] = df["a_quap_radtour_so"]
     r["cycling_winter"] = df["a_quap_radtour_wi"]
 

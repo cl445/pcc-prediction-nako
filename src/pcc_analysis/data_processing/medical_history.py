@@ -1,4 +1,4 @@
-"""Medical history: anthropometry, comorbidities, medications, surgeries."""
+"""Medical history: anthropometry, comorbidities, medications, procedures."""
 
 from __future__ import annotations
 
@@ -36,10 +36,17 @@ def _extract_medical_history(df: DataFrame) -> DataFrame:
     # Anthropometry (measured)
     r["body_fat_percentage"] = df.get("anthro_fettmasse")
 
-    # Cardiovascular diseases (NAKO coding: 1=yes, 2=no → boolean)
-    r["has_hypertension"] = (df["a_hte_ad_cur"] == 1).astype("boolean")
-    r["hypertension_age_onset"] = df["a_hte_ad_onset"]
-    r["hypertension_age_category"] = df["a_hte_ad_onset_cat"].replace([8, 9], pd.NA)
+    # Hypertension: "Has a doctor ever diagnosed ... high blood pressure?"
+    # (d_an_cv_6, 1 = yes, 2 = no) and NAKO's derived age at first
+    # diagnosis. Not a_hte_ad_cur, which is current atopic eczema
+    # (DECISIONS §2.34).
+    r["has_hypertension"] = (df["d_an_cv_6"] == 1).astype("boolean")
+    r["hypertension_age_onset"] = df["a_an_cvht_age"]
+
+    # Skin diseases (NAKO coding: 1 = yes, 2 = no → boolean)
+    r["has_atopic_eczema"] = (df["a_hte_ad_cur"] == 1).astype("boolean")
+    r["atopic_eczema_age_onset"] = df["a_hte_ad_onset"]
+    r["atopic_eczema_age_category"] = df["a_hte_ad_onset_cat"].replace([8, 9], pd.NA)
     r["has_psoriasis"] = (df["a_hte_pso_cur"] == 1).astype("boolean")
     r["psoriasis_age_onset"] = df["a_hte_pso_onset"]
     r["has_psoriasis_arthritis"] = (df["a_hte_psa_cur"] == 1).astype("boolean")
@@ -68,20 +75,21 @@ def _extract_medical_history(df: DataFrame) -> DataFrame:
     r["cancer_4_age"] = df["a_kre_4_alter"]
     r["cancer_1_type"] = df["a_kre_1_nc"]
 
-    # Surgeries (age at surgery)
-    r["surgery_general_anesthesia_1_age"] = df["a_op_alg1a_age"]
-    r["surgery_general_anesthesia_2_age"] = df["a_op_alg1b_age"]
-    r["surgery_general_anesthesia_3_age"] = df["a_op_alg1c_age"]
-    r["surgery_general_anesthesia_4_age"] = df["a_op_alg1d_age"]
-    r["surgery_general_anesthesia_5_age"] = df["a_op_alg1e_age"]
-    r["surgery_general_anesthesia_6_age"] = df["a_op_alg1f_age"]
-    r["surgery_general_anesthesia_7_age"] = df["a_op_alg1g_age"]
-    r["surgery_removal_age"] = df["a_op_entf1g_age"]
+    # Cardiovascular procedures (age at procedure). NAKO's "HK-relevante
+    # OP" block, not surgery under general anaesthesia in general.
+    r["cv_procedure_heart_valve_age"] = df["a_op_alg1a_age"]
+    r["cv_procedure_ptca_age"] = df["a_op_alg1b_age"]
+    r["cv_procedure_cardiac_bypass_age"] = df["a_op_alg1c_age"]
+    r["cv_procedure_pacemaker_age"] = df["a_op_alg1d_age"]
+    r["cv_procedure_leg_artery_dilatation_age"] = df["a_op_alg1e_age"]
+    r["cv_procedure_leg_artery_bypass_age"] = df["a_op_alg1f_age"]
+    r["cv_procedure_carotid_age"] = df["a_op_alg1g_age"]
+    r["thyroid_removal_age"] = df["a_op_entf1g_age"]
 
-    # Neurological conditions
-    r["stroke_age"] = df.get("a_apo_yearsfirst")
-    r["epilepsy_age"] = df.get("a_epi_yearsfirst")
-    r["parkinsons_age"] = df.get("a_park_yearsfirst")
+    # Neurological conditions: years since the first event, not age at it
+    r["stroke_years_since"] = df.get("a_apo_yearsfirst")
+    r["epilepsy_years_since"] = df.get("a_epi_yearsfirst")
+    r["parkinsons_years_since"] = df.get("a_park_yearsfirst")
 
     return _replace_nako_missing(r)
 
@@ -114,10 +122,10 @@ def _derive_medical_metrics(df: DataFrame) -> DataFrame:
         df[infection_cols].notna().any(axis=1).astype("boolean")
     )
 
-    # Surgery count
-    surgery_cols = [f"surgery_general_anesthesia_{i}_age" for i in range(1, 8)]
-    df["number_surgeries"] = df[surgery_cols].notna().sum(axis=1).astype("Int8")
-    df["has_surgery_history"] = (df["number_surgeries"] > 0).astype("boolean")
+    # Cardiovascular procedure count
+    procedure_cols = [c for c in df.columns if c.startswith("cv_procedure_")]
+    df["number_cv_procedures"] = df[procedure_cols].notna().sum(axis=1).astype("Int8")
+    df["has_cv_procedure"] = (df["number_cv_procedures"] > 0).astype("boolean")
 
     # Medication count
     med_cols = [
@@ -132,10 +140,15 @@ def _derive_medical_metrics(df: DataFrame) -> DataFrame:
     df["number_medications"] = sum(
         (df[c] == 1).astype("Int8") for c in med_cols if c in df.columns
     )
+    # At least 5 of the 7 recorded drug classes, not 5 medications.
     df["polypharmacy"] = (df["number_medications"] >= 5).astype("boolean")
 
     # Neurological disease flag
-    neuro_cols = ["stroke_age", "epilepsy_age", "parkinsons_age"]
+    neuro_cols = [
+        "stroke_years_since",
+        "epilepsy_years_since",
+        "parkinsons_years_since",
+    ]
     df["has_neurological_disease"] = (
         df[neuro_cols].notna().any(axis=1).astype("boolean")
     )

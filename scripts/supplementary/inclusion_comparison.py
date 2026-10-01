@@ -4,7 +4,7 @@ Fifty-six per cent of the neuroimaging subsample does not reach the analytic
 sample: most of them never reported an infection, the rest have no observable
 Corona-2 symptom outcome or fall in the sub-threshold band the clean-controls
 design excludes. A reader cannot tell from the participant flow alone whether
-that attrition is benign, and a reviewer asked for the comparison directly.
+that attrition is benign.
 
 The question this answers is narrow and worth stating precisely: it is not
 whether the imaged differ from the unimaged (that is the MRI participation

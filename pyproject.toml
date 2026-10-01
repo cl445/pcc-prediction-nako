@@ -255,7 +255,9 @@ use-ignore-files = false
 # `pcc_analysis` package. `scripts/figures` is on the path because the
 # regenerate_* scripts import their sibling `_style` module the way the
 # interpreter resolves it at runtime -- from the script's own directory.
-search-path = [".", "src", "scripts/figures"]
+# `scripts` is there for the same reason: check_paper_tables imports its
+# sibling check_paper_constants.
+search-path = [".", "src", "scripts", "scripts/figures"]
 # Nothing is replaced by `Any`: every dependency, sklearn included, is
 # type-checked. `sklearn.base` describes estimators nominally through
 # BaseEstimator and TransformerMixin, while this codebase describes them

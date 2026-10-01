@@ -67,22 +67,23 @@ def _verdict_cell(passed: bool) -> str:
     return r"\textsc{Pass}" if passed else r"\textsc{Fail}"
 
 
+def _fmt_num(value: float, precision: int = 3, signed: bool = False) -> str:
+    """siunitx number; ``signed`` keeps an explicit plus on positive values."""
+    if signed:
+        return rf"\num[retain-explicit-plus]{{{value:+.{precision}f}}}"
+    return rf"\num{{{value:.{precision}f}}}"
+
+
 def _fmt_band(band: list[float], precision: int = 3) -> str:
     lo, hi = band
-    return (
-        f"[{lo:+.{precision}f}, {hi:+.{precision}f}]"
-        if min(band) < 0
-        else (f"[{lo:.{precision}f}, {hi:.{precision}f}]")
-    )
+    signed = min(band) < 0
+    return f"[{_fmt_num(lo, precision, signed)}, {_fmt_num(hi, precision, signed)}]"
 
 
 def _fmt_ci(ci: list[float], precision: int = 3) -> str:
     lo, hi = ci
-    return (
-        f"{lo:+.{precision}f}, {hi:+.{precision}f}"
-        if min(ci) < 0
-        else (f"{lo:.{precision}f}, {hi:.{precision}f}")
-    )
+    signed = min(ci) < 0
+    return f"{_fmt_num(lo, precision, signed)}, {_fmt_num(hi, precision, signed)}"
 
 
 def build_panel(source_run: Path, transfer_run: Path) -> dict[str, Any]:
@@ -143,13 +144,17 @@ def build_panel(source_run: Path, transfer_run: Path) -> dict[str, Any]:
 
 def render_latex(panel: dict[str, Any]) -> str:
     rows = panel["rows"]
-    overall = "\\textsc{Pass}" if panel["overall_pass"] else "\\textsc{Fail}"
+    overall = _verdict_cell(panel["overall_pass"])
     header = (
         r"\begin{table}[H]"
         "\n"
         r"\centering"
         "\n"
-        r"\caption{Within-study transportability performance-equivalence panel.  Target-cohort 95\,\% CI must lie entirely within the pre-specified equivalence band for PASS.  Bands follow literature-standard clinical-prediction-model transportability thresholds (Van Calster et al.\ 2016).}"
+        r"\caption{\textbf{Within-study transportability performance-equivalence "
+        r"panel.} Target-cohort \qty{95}{\percent} CI must lie entirely within the "
+        "pre-specified equivalence band for PASS.  Bands follow literature-standard "
+        "clinical-prediction-model transportability thresholds "
+        r"\citep{vancalster_2016}.}"
         "\n"
         r"\label{tab:transport_panel}"
         "\n"
@@ -157,27 +162,30 @@ def render_latex(panel: dict[str, Any]) -> str:
         "\n"
         r"\toprule"
         "\n"
-        r"Metric & Source point & Target (95\,\% CI) & Equivalence band & Verdict \\"
+        r"\textbf{Metric} & \textbf{Source point} & "
+        r"\textbf{Target (\qty{95}{\percent} CI)} & \textbf{Equivalence band} & "
+        r"\textbf{Verdict} \\"
         "\n"
         r"\midrule"
         "\n"
     )
+    labels = {
+        "ROC-AUC": r"\acs{ROC}-\acs{AUC}",
+        "Calibration slope": "Calibration slope",
+        "Calibration intercept": "Calibration intercept",
+    }
     body: list[str] = []
     for r in rows:
-        if r["metric"] == "ROC-AUC":
-            src_cell = f"{r['source_point']:.3f}"
-            tgt_cell = f"{r['target_point']:.3f} ({_fmt_ci(r['target_ci'])})"
-            band_cell = _fmt_band(r["equivalence_band"])
-        elif r["metric"] == "Calibration slope":
-            src_cell = f"{r['source_point']:.3f}"
-            tgt_cell = f"{r['target_point']:.3f} ({_fmt_ci(r['target_ci'])})"
-            band_cell = _fmt_band(r["equivalence_band"], precision=2)
-        else:  # Calibration intercept
-            src_cell = f"{r['source_point']:+.3f}"
-            tgt_cell = f"{r['target_point']:+.3f} ({_fmt_ci(r['target_ci'])})"
-            band_cell = _fmt_band(r["equivalence_band"], precision=2)
+        signed = r["metric"] == "Calibration intercept"
+        band_precision = 3 if r["metric"] == "ROC-AUC" else 2
+        src_cell = _fmt_num(r["source_point"], signed=signed)
+        tgt_cell = (
+            f"{_fmt_num(r['target_point'], signed=signed)} ({_fmt_ci(r['target_ci'])})"
+        )
+        band_cell = _fmt_band(r["equivalence_band"], precision=band_precision)
         body.append(
-            f"{r['metric']} & {src_cell} & {tgt_cell} & {band_cell} & {_verdict_cell(r['pass'])} \\\\"
+            f"{labels[r['metric']]} & {src_cell} & {tgt_cell} & {band_cell} & "
+            f"{_verdict_cell(r['pass'])} \\\\"
         )
     footer = (
         r"\midrule"
@@ -186,6 +194,10 @@ def render_latex(panel: dict[str, Any]) -> str:
         r"\bottomrule"
         "\n"
         r"\end{tabular}"
+        "\n"
+        r"\par\smallskip\footnotesize"
+        "\n"
+        r"\acs{ROC}~=~\acl{ROC}; \acs{AUC}~=~\acl{AUC}; \acs{CI}~=~\acl{CI}."
         "\n"
         r"\end{table}"
         "\n"

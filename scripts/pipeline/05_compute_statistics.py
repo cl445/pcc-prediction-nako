@@ -49,9 +49,8 @@ MODALITY_PIPELINE_KEYS: dict[str, str] = {
 }
 
 # Feature counts are not listed here. ``generate_table2`` counts the real
-# columns; the fallbacks this dict used to carry were stale (MRI 314 against
-# an actual 599, lung function 7 against 9) and surfaced only when a parquet
-# was missing, i.e. exactly when the table had nothing to describe. A count
+# columns. A hand-carried fallback would surface only when a parquet is
+# missing, i.e. exactly when the table has nothing to describe, and a count
 # nobody recomputes is a table cell that quietly stops describing the model.
 MODALITIES: dict[str, dict[str, str | list[str]]] = {
     "Demographics": {
@@ -133,7 +132,7 @@ TABLE1_VARIABLES: dict[str, dict[str, str | int | dict[str, str]]] = {
     },
     "Hypertension": {"col": "has_hypertension", "type": "binary"},
     "Cancer history": {"col": "has_cancer_history", "type": "binary"},
-    r"Polypharmacy ($\geq$5 medications)": {"col": "polypharmacy", "type": "binary"},
+    r"$\geq$5 of 7 recorded drug classes": {"col": "polypharmacy", "type": "binary"},
     "Had COVID-19": {"col": "had_covid", "type": "binary"},
     "Number of symptoms": {"col": "n_symptoms", "type": "continuous"},
     "PHQ-9 score (0-27)": {"col": "phq9_total", "type": "continuous"},

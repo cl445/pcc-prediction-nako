@@ -329,7 +329,7 @@
           "q99": 5.0,
           "missing_frac": 0.0
         },
-        "number_children": {
+        "children_under14_household": {
           "dtype": "integer",
           "pandas_dtype": "UInt8",
           "mean": 0.35,
@@ -406,7 +406,7 @@
           "q99": 20.0,
           "missing_frac": 0.022
         },
-        "german_education_level": {
+        "german_language_proficiency": {
           "dtype": "integer",
           "pandas_dtype": "UInt8",
           "mean": 0.183,
@@ -442,7 +442,7 @@
           "q99": 5.0,
           "missing_frac": 0.056
         },
-        "income_weighted": {
+        "equivalised_income": {
           "dtype": "numeric",
           "mean": 2480.0,
           "std": 1530.0,
@@ -453,7 +453,7 @@
           "q99": 9330.0,
           "missing_frac": 0.056
         },
-        "needs_weighted": {
+        "needs_weight": {
           "dtype": "numeric",
           "mean": 1.67,
           "std": 0.498,
@@ -635,7 +635,7 @@
           "q99": 67.0,
           "missing_frac": 0.861
         },
-        "employment_duration_years": {
+        "unemployment_duration_current_years": {
           "dtype": "numeric",
           "mean": 2.17,
           "std": 3.91,
@@ -646,7 +646,7 @@
           "q99": 19.8,
           "missing_frac": 0.978
         },
-        "employment_duration_total": {
+        "unemployment_duration_total_years": {
           "dtype": "numeric",
           "mean": 1.29,
           "std": 2.22,
@@ -657,7 +657,7 @@
           "q99": 12.0,
           "missing_frac": 0.511
         },
-        "employment_date": {
+        "unemployment_start_date": {
           "dtype": "datetime",
           "missing_frac": 0.978
         },
@@ -713,18 +713,6 @@
           "dtype": "boolean",
           "true_frac": 0.227,
           "missing_frac": 0.0,
-          "derived": true
-        },
-        "income_adequacy": {
-          "dtype": "numeric",
-          "mean": 1640.0,
-          "std": 1180.0,
-          "q01": 239.0,
-          "q25": 950.0,
-          "q50": 1360.0,
-          "q75": 2110.0,
-          "q99": 6220.0,
-          "missing_frac": 0.056,
           "derived": true
         }
       },
@@ -880,7 +868,7 @@
           "q99": 8.0,
           "missing_frac": 0.029
         },
-        "number_series": {
+        "purdue_pegboard_pairs": {
           "dtype": "integer",
           "pandas_dtype": "UInt8",
           "mean": 10.2,
@@ -892,7 +880,7 @@
           "q99": 15.0,
           "missing_frac": 0.684
         },
-        "cognitive_composite_score": {
+        "number_series_ability": {
           "dtype": "numeric",
           "mean": 501.0,
           "std": 20.7,
@@ -920,7 +908,7 @@
           "q99": 6.0,
           "missing_frac": 0.008
         },
-        "household_minutes_week": {
+        "household_minutes_day": {
           "dtype": "numeric",
           "mean": 57.0,
           "std": 113.0,
@@ -1331,11 +1319,27 @@
         },
         "has_hypertension": {
           "dtype": "boolean",
-          "true_frac": 0.021,
-          "missing_frac": 0.006,
-          "derived": true
+          "true_frac": 0.238,
+          "missing_frac": 0.003
         },
         "hypertension_age_onset": {
+          "dtype": "integer",
+          "pandas_dtype": "UInt8",
+          "mean": 44.8,
+          "std": 12.7,
+          "q01": 14.0,
+          "q25": 38.0,
+          "q50": 47.0,
+          "q75": 54.0,
+          "q99": 67.0,
+          "missing_frac": 0.766
+        },
+        "has_atopic_eczema": {
+          "dtype": "boolean",
+          "true_frac": 0.021,
+          "missing_frac": 0.006
+        },
+        "atopic_eczema_age_onset": {
           "dtype": "integer",
           "pandas_dtype": "UInt8",
           "mean": 19.4,
@@ -1347,7 +1351,7 @@
           "q99": 62.0,
           "missing_frac": 0.914
         },
-        "hypertension_age_category": {
+        "atopic_eczema_age_category": {
           "dtype": "integer",
           "pandas_dtype": "UInt8",
           "mean": 2.95,
@@ -1476,7 +1480,7 @@
           "q99": 301.0,
           "missing_frac": 0.935
         },
-        "surgery_general_anesthesia_2_age": {
+        "cv_procedure_ptca_age": {
           "dtype": "integer",
           "pandas_dtype": "UInt8",
           "mean": 53.9,
@@ -1488,7 +1492,7 @@
           "q99": 69.0,
           "missing_frac": 0.985
         },
-        "surgery_removal_age": {
+        "thyroid_removal_age": {
           "dtype": "integer",
           "pandas_dtype": "UInt8",
           "mean": 40.8,
@@ -1500,7 +1504,7 @@
           "q99": 66.0,
           "missing_frac": 0.964
         },
-        "stroke_age": {
+        "stroke_years_since": {
           "dtype": "integer",
           "pandas_dtype": "UInt8",
           "mean": 8.1,
@@ -1512,7 +1516,7 @@
           "q99": 34.7,
           "missing_frac": 0.989
         },
-        "epilepsy_age": {
+        "epilepsy_years_since": {
           "dtype": "integer",
           "pandas_dtype": "UInt8",
           "mean": 25.1,
@@ -1562,7 +1566,7 @@
           "missing_frac": 0.0,
           "derived": true
         },
-        "number_surgeries": {
+        "number_cv_procedures": {
           "dtype": "integer",
           "pandas_dtype": "UInt8",
           "mean": 0.0272,
@@ -1575,7 +1579,7 @@
           "missing_frac": 0.0,
           "derived": true
         },
-        "has_surgery_history": {
+        "has_cv_procedure": {
           "dtype": "boolean",
           "true_frac": 0.023,
           "missing_frac": 0.0,
@@ -2110,7 +2114,7 @@
           "missing_frac": 0.032,
           "derived": true
         },
-        "gad7_diagnosis": {
+        "gad7_severity_category": {
           "dtype": "integer",
           "pandas_dtype": "UInt8",
           "mean": 1.09,
@@ -2191,7 +2195,7 @@
           "true_frac": 0.194,
           "missing_frac": 0.866
         },
-        "depression_episode_duration": {
+        "months_since_depressed_period": {
           "dtype": "integer",
           "pandas_dtype": "UInt16",
           "mean": 71.0,

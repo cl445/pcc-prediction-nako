@@ -113,10 +113,9 @@ def test_an_absent_modality_parquet_is_reported_as_unavailable(
 
     assert results["Mental Health"]["pattern"] == "Not available"
     assert results["Mental Health"]["n_complete"] == 0
-    # No count at all rather than a plausible one. The dict used to carry a
-    # per-modality fallback, and two of those had drifted years behind the
-    # data, so a missing parquet printed a wrong number next to the words
-    # "Not available" instead of admitting it had nothing to count.
+    # No count at all rather than a plausible one: a fallback count would
+    # print a number next to the words "Not available" instead of admitting
+    # there is nothing to count.
     assert results["Mental Health"]["n_features"] is None
     assert "Mental Health & n/a &" in latex
 

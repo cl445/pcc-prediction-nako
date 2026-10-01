@@ -20,6 +20,7 @@ from sklearn.model_selection import StratifiedKFold
 from ._gpu_utils import cuda_available, xgb_device
 from ._provenance import package_versions, write_provenance
 from .evaluation import (
+    compute_paired_bootstrap_delta_ci,
     evaluate_model_comprehensive,
     plot_modality_contribution_comparison,
     save_figure_for_latex,
@@ -32,6 +33,7 @@ from .meta_learner import (
 )
 from .modality_pipelines import ModalityPipelineFactory
 from .run_comparability import fingerprint_analysis_data
+from .statistical_tests import nadeau_bengio_corrected_t_test
 
 if TYPE_CHECKING:
     from ._types import (
@@ -52,6 +54,41 @@ if TYPE_CHECKING:
     from .protocols import ConfoundedEstimator
 
 logger = logging.getLogger(__name__)
+
+ABLATION_BLOCKS: dict[str, str] = {"mri": "mri_"}
+"""Modality blocks the block ablation removes together, block name to prefix.
+
+A block is every modality whose name starts with the prefix. The six MRI
+atlases are the one block the manuscript asks about: masked one at a time,
+the other five still carry the same information, so the single-modality
+ablation cannot say what the block as a whole contributes.
+"""
+
+BLOCK_ABLATION_VARIANTS: tuple[str, ...] = ("masked", "retrained")
+"""The two ways a block is removed: masked with NaN under the fold's own
+meta-learner, or the meta-learner refitted without the block's columns."""
+
+
+def resolve_ablation_blocks(
+    modality_names: list[str],
+    prefixes: dict[str, str] = ABLATION_BLOCKS,
+) -> dict[str, list[str]]:
+    """Expand block prefixes into member lists, in modality order.
+
+    A prefix that matches nothing is an error rather than an empty block: an
+    empty block would score the full model against itself and report a
+    delta of zero for a block that was never removed.
+    """
+    blocks: dict[str, list[str]] = {}
+    for block, prefix in prefixes.items():
+        members = [m for m in modality_names if m.startswith(prefix)]
+        if not members:
+            raise ValueError(
+                f"Ablation block '{block}' (prefix '{prefix}') matches none of "
+                f"the modalities {modality_names}"
+            )
+        blocks[block] = members
+    return blocks
 
 
 class PCCMultimodalPipeline:
@@ -94,7 +131,6 @@ class PCCMultimodalPipeline:
         random_state: int = 42,
         n_jobs: int = -1,
         meta_permutation_iterations: int = 1000,
-        n_subsamples: int = 100,
         n_bootstrap_eval: int = 1000,
         cohort: str = "all",
         stack_variant: str = "full",
@@ -114,7 +150,6 @@ class PCCMultimodalPipeline:
         self.random_state = random_state
         self.n_jobs = n_jobs
         self.meta_permutation_iterations = meta_permutation_iterations
-        self.n_subsamples = n_subsamples
         self.n_bootstrap_eval = n_bootstrap_eval
         # These six are recorded for provenance only: the pipeline itself
         # runs on whatever (y, X_dict) it is given; the filters and the
@@ -282,7 +317,6 @@ class PCCMultimodalPipeline:
             orthogonalize=self.orthogonalize,
             cv=self.n_inner_folds,
             n_jobs=self.n_jobs,
-            n_subsamples=self.n_subsamples,
         )
         pipelines = self._create_pipelines(factory, list(X_dict.keys()))
 
@@ -362,6 +396,10 @@ class PCCMultimodalPipeline:
         per_fold_oos = getattr(self, "_per_fold_oos", [])
         dropout_oos_results = self._modality_ablation_oos(per_fold_oos)
 
+        # 7c. Out-of-sample block ablation: all members of a block removed at
+        # once, masked and with the fold's meta-learner retrained without them
+        block_oos_results = self._block_ablation_oos(per_fold_oos)
+
         # 8. Incremental performance (in-sample at meta-learner level)
         incremental_results = self._incremental_performance(
             final_model["oof_predictions"],
@@ -384,6 +422,7 @@ class PCCMultimodalPipeline:
             "shap_results": shap_results,
             "modality_ablation": dropout_results,
             "modality_ablation_oos": dropout_oos_results,
+            "block_ablation_oos": block_oos_results,
             "incremental_performance": incremental_results,
             "incremental_performance_oos": incremental_oos_results,
             "evaluation": evaluation,
@@ -1086,6 +1125,231 @@ class PCCMultimodalPipeline:
         else:
             return df
 
+    def _block_ablation_oos(
+        self,
+        per_fold_oos: list[PerFoldOoS],
+        blocks: dict[str, list[str]] | None = None,
+    ) -> pd.DataFrame | None:
+        """Out-of-sample ablation of whole modality blocks, with retraining.
+
+        :meth:`_modality_ablation_oos` masks one modality at a time. For a
+        block of correlated modalities that is the weakest available test:
+        the remaining members still carry the block's information, and the
+        sum of the single deltas is not the delta of the block. This method
+        removes every member of a block at once, in two variants per outer
+        fold:
+
+        - ``masked``: the block's columns of the held-out base-learner
+          predictions are set to ``NaN`` and the fold's own meta-learner
+          re-scores them, as in the single-modality ablation;
+        - ``retrained``: the fold's meta-learner is fitted again on the
+          training-fold stacking matrix without the block's columns, with the
+          same hyperparameter search and seed as the original, and scores the
+          held-out fold from the remaining columns.
+
+        Retraining stops at the meta-learner because nothing below it depends
+        on the block: each base learner sees only its own modality and is
+        orthogonalised only against the confounders, so removing a block
+        changes no other base learner's predictions.
+
+        Per block and variant the method reports the held-out delta (full
+        minus variant) in ROC-AUC and PR-AUC with a paired participant
+        bootstrap interval, resampled stratified for ROC-AUC and unstratified
+        for PR-AUC as in the primary evaluation, and a Nadeau-Bengio test over
+        the per-fold scores as the secondary criterion. Folds are
+        concatenated in the order of :meth:`_modality_ablation_oos`, so
+        ``roc_full`` and ``pr_full`` are the numbers in
+        ``modality_ablation_oos.csv``.
+
+        ``blocks`` defaults to :data:`ABLATION_BLOCKS` resolved against the
+        run's modality names; a run without any member of a block (the Lean
+        stacks carry no MRI) skips the analysis with a warning, like the
+        neighbouring post-CV steps skip on failure.
+
+        Writes ``block_ablation_oos.csv`` (one row per block and variant) and
+        ``block_ablation_oos_predictions.csv`` (the concatenated held-out
+        predictions, so the intervals can be recomputed offline).
+        """
+        if not per_fold_oos:
+            logger.info("Skipping OoS block ablation: no per-fold artifacts")
+            return None
+        modality_names = per_fold_oos[0]["modality_names"]
+        if blocks is None:
+            try:
+                blocks = resolve_ablation_blocks(modality_names)
+            except ValueError as e:
+                logger.warning("Skipping OoS block ablation: %s", e)
+                return None
+        try:
+            n_total = sum(len(f["y_te"]) for f in per_fold_oos)
+            n_train = int(np.mean([len(f["y_tr"]) for f in per_fold_oos]))
+            n_test = int(np.mean([len(f["y_te"]) for f in per_fold_oos]))
+            fold_cat = np.empty(n_total, dtype=np.int64)
+            y_true_cat = np.empty(n_total, dtype=np.int8)
+            y_full_cat = np.empty(n_total, dtype=np.float64)
+            keys = [
+                (block, variant)
+                for block in blocks
+                for variant in BLOCK_ABLATION_VARIANTS
+            ]
+            y_variant_cat = {key: np.empty(n_total, dtype=np.float64) for key in keys}
+            fold_roc: dict[tuple[str, str], list[float]] = {
+                key: [] for key in [("full", "full"), *keys]
+            }
+            fold_pr: dict[tuple[str, str], list[float]] = {
+                key: [] for key in [("full", "full"), *keys]
+            }
+
+            offset = 0
+            for fold in per_fold_oos:
+                meta = fold["meta"]
+                test_preds = fold["test_preds"]
+                y_te = fold["y_te"]
+                n_te = len(y_te)
+                window = slice(offset, offset + n_te)
+                fold_cat[window] = fold["fold_idx"] + 1
+                y_true_cat[window] = y_te
+                y_full = meta.predict_proba(test_preds)[:, 1]
+                y_full_cat[window] = y_full
+                fold_roc["full", "full"].append(float(roc_auc_score(y_te, y_full)))
+                fold_pr["full", "full"].append(
+                    float(average_precision_score(y_te, y_full))
+                )
+
+                for block, members in blocks.items():
+                    drop = [modality_names.index(m) for m in members]
+                    keep = [i for i in range(len(modality_names)) if i not in drop]
+                    masked = test_preds.copy()
+                    masked[:, drop] = np.nan
+                    y_masked = meta.predict_proba(masked)[:, 1]
+
+                    _t0 = time.monotonic()
+                    meta_without = train_meta_learner(
+                        fold["oof_train"][:, keep],
+                        fold["y_tr"],
+                        [modality_names[i] for i in keep],
+                        add_interactions=False,
+                        random_state=self.random_state,
+                        n_jobs=self.n_jobs,
+                        hyperparam_iterations=self.hyperparam_iterations,
+                    )
+                    y_retrained = meta_without.predict_proba(test_preds[:, keep])[:, 1]
+                    logger.info(
+                        "  Block '%s' fold %d: meta-learner retrained without "
+                        "%d modalities in %.1fs",
+                        block,
+                        fold["fold_idx"] + 1,
+                        len(members),
+                        time.monotonic() - _t0,
+                    )
+
+                    for variant, y_var in (
+                        ("masked", y_masked),
+                        ("retrained", y_retrained),
+                    ):
+                        y_variant_cat[block, variant][window] = y_var
+                        fold_roc[block, variant].append(
+                            float(roc_auc_score(y_te, y_var))
+                        )
+                        fold_pr[block, variant].append(
+                            float(average_precision_score(y_te, y_var))
+                        )
+                offset += n_te
+
+            roc_full = float(roc_auc_score(y_true_cat, y_full_cat))
+            pr_full = float(average_precision_score(y_true_cat, y_full_cat))
+
+            rows = []
+            for block, members in blocks.items():
+                for variant in BLOCK_ABLATION_VARIANTS:
+                    y_var = y_variant_cat[block, variant]
+                    delta_roc, roc_lo, roc_hi = compute_paired_bootstrap_delta_ci(
+                        y_true_cat,
+                        y_full_cat,
+                        y_var,
+                        roc_auc_score,
+                        n_bootstrap=self.n_bootstrap_eval,
+                        random_state=self.random_state,
+                        n_jobs=self.n_jobs,
+                        stratify=True,
+                    )
+                    delta_pr, pr_lo, pr_hi = compute_paired_bootstrap_delta_ci(
+                        y_true_cat,
+                        y_full_cat,
+                        y_var,
+                        average_precision_score,
+                        n_bootstrap=self.n_bootstrap_eval,
+                        random_state=self.random_state,
+                        n_jobs=self.n_jobs,
+                        stratify=False,
+                    )
+                    nb_roc = nadeau_bengio_corrected_t_test(
+                        np.asarray(fold_roc["full", "full"]),
+                        np.asarray(fold_roc[block, variant]),
+                        n_train=n_train,
+                        n_test=n_test,
+                    )
+                    nb_pr = nadeau_bengio_corrected_t_test(
+                        np.asarray(fold_pr["full", "full"]),
+                        np.asarray(fold_pr[block, variant]),
+                        n_train=n_train,
+                        n_test=n_test,
+                    )
+                    rows.append(
+                        {
+                            "block": block,
+                            "variant": variant,
+                            "n_removed": len(members),
+                            "roc_full": roc_full,
+                            "roc_variant": float(roc_auc_score(y_true_cat, y_var)),
+                            "delta_roc": delta_roc,
+                            "delta_roc_ci_lo": roc_lo,
+                            "delta_roc_ci_hi": roc_hi,
+                            "pr_full": pr_full,
+                            "pr_variant": float(
+                                average_precision_score(y_true_cat, y_var)
+                            ),
+                            "delta_pr": delta_pr,
+                            "delta_pr_ci_lo": pr_lo,
+                            "delta_pr_ci_hi": pr_hi,
+                            "nb_t_roc": nb_roc["t_statistic"],
+                            "nb_p_roc": nb_roc["p_value"],
+                            "nb_t_pr": nb_pr["t_statistic"],
+                            "nb_p_pr": nb_pr["p_value"],
+                        }
+                    )
+                    logger.info(
+                        "OoS block ablation: block '%s' %s: ΔROC-AUC=%.4f "
+                        "[%.4f, %.4f], ΔPR-AUC=%.4f [%.4f, %.4f]",
+                        block,
+                        variant,
+                        delta_roc,
+                        roc_lo,
+                        roc_hi,
+                        delta_pr,
+                        pr_lo,
+                        pr_hi,
+                    )
+
+            df = pd.DataFrame(rows)
+            df.to_csv(self.output_dir / "block_ablation_oos.csv", index=False)
+
+            predictions = {
+                "fold": fold_cat,
+                "y_true": y_true_cat,
+                "y_full": y_full_cat,
+            }
+            for (block, variant), y_var in y_variant_cat.items():
+                predictions[f"y_{block}_{variant}"] = y_var
+            pd.DataFrame(predictions).to_csv(
+                self.output_dir / "block_ablation_oos_predictions.csv", index=False
+            )
+        except Exception as e:
+            logger.warning("OoS block ablation failed: %s", e)
+            return None
+        else:
+            return df
+
     def _incremental_performance_oos(
         self,
         per_fold_oos: list[PerFoldOoS],
@@ -1261,13 +1525,10 @@ class PCCMultimodalPipeline:
             "split_mh_submodalities": self.split_mh_submodalities,
             "amendment_features": self.amendment_features,
             "hyperparam_iterations": self.hyperparam_iterations,
-            # Stability selection resamples this many times per modality, so
-            # it decides which features survive into every base learner.
             # ``n_jobs``, ``meta_permutation_iterations`` and
             # ``n_bootstrap_eval`` are deliberately absent: they change how
             # long a run takes, how tight its p-value is and how wide its
             # confidence interval is, but not the model that was fitted.
-            "n_subsamples": self.n_subsamples,
         }
 
 
@@ -1283,7 +1544,6 @@ def run_pcc_pipeline(
     random_state: int = ...,
     n_jobs: int = ...,
     meta_permutation_iterations: int = ...,
-    n_subsamples: int = ...,
     n_bootstrap_eval: int = ...,
     fold_subset: None = ...,
     cohort: str = ...,
@@ -1308,7 +1568,6 @@ def run_pcc_pipeline(
     random_state: int = ...,
     n_jobs: int = ...,
     meta_permutation_iterations: int = ...,
-    n_subsamples: int = ...,
     n_bootstrap_eval: int = ...,
     *,
     fold_subset: list[int],
@@ -1333,7 +1592,6 @@ def run_pcc_pipeline(
     random_state: int = 42,
     n_jobs: int = -1,
     meta_permutation_iterations: int = 1000,
-    n_subsamples: int = 100,
     n_bootstrap_eval: int = 1000,
     fold_subset: list[int] | None = None,
     cohort: str = "all",
@@ -1377,7 +1635,6 @@ def run_pcc_pipeline(
         random_state=random_state,
         n_jobs=n_jobs,
         meta_permutation_iterations=meta_permutation_iterations,
-        n_subsamples=n_subsamples,
         n_bootstrap_eval=n_bootstrap_eval,
         cohort=cohort,
         stack_variant=stack_variant,
@@ -1406,7 +1663,6 @@ def merge_fold_results(
     random_state: int = 42,
     n_jobs: int = -1,
     meta_permutation_iterations: int = 1000,
-    n_subsamples: int = 100,
     n_bootstrap_eval: int = 1000,
     output_dir: Path | str | None = None,
     cohort: str = "all",
@@ -1529,7 +1785,6 @@ def merge_fold_results(
         random_state=random_state,
         n_jobs=n_jobs,
         meta_permutation_iterations=meta_permutation_iterations,
-        n_subsamples=n_subsamples,
         n_bootstrap_eval=n_bootstrap_eval,
         cohort=cohort,
         stack_variant=stack_variant,
@@ -1610,7 +1865,6 @@ def merge_fold_results(
         orthogonalize=orthogonalize,
         cv=n_inner_folds,
         n_jobs=n_jobs,
-        n_subsamples=n_subsamples,
     )
     pipelines = pipeline._create_pipelines(factory, list(X_dict.keys()))
 

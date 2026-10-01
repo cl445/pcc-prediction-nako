@@ -8,12 +8,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+import pandas as pd
 import pytest
 
+from pcc_analysis import orchestration
 from pcc_analysis.meta_learner import META_HYPERPARAM_ITERATIONS, MetaLearner
 from pcc_analysis.orchestration import (
     PCCMultimodalPipeline,
     merge_fold_results,
+    resolve_ablation_blocks,
     run_pcc_pipeline,
 )
 from pcc_analysis.run_comparability import fingerprint_analysis_data
@@ -179,7 +182,7 @@ def test_incremental_performance_shape(
     assert result is not None
     # 3 modalities - 1 baseline = 2 rows
     assert len(result) == 2
-    assert "demographics" not in result["modality"].values
+    assert "demographics" not in result["modality"].to_numpy()
 
 
 def test_incremental_performance_columns(
@@ -289,7 +292,7 @@ def test_incremental_performance_oos_shape(
 
     assert result is not None
     assert len(result) == 2  # 3 modalities - 1 baseline
-    assert "demographics" not in result["modality"].values
+    assert "demographics" not in result["modality"].to_numpy()
     assert {"modality", "pr_auc_baseline", "pr_auc_augmented", "delta_pr_auc"}.issubset(
         result.columns
     )
@@ -302,6 +305,141 @@ def test_incremental_performance_oos_empty_folds(
 ) -> None:
     """Empty fold list returns None silently."""
     assert pipeline._incremental_performance_oos([]) is None
+
+
+# ------------------------------------------------------------------
+# Out-of-Sample Block Ablation Tests
+# ------------------------------------------------------------------
+
+STRONG_BLOCK = {"strong": ["lab_values"]}
+"""The fixture's strongest modality (signal 0.6) as a one-member block."""
+
+
+def test_block_ablation_oos_writes_one_row_per_block_and_variant(
+    pipeline: PCCMultimodalPipeline,
+    per_fold_oos_data: list[PerFoldOoS],
+) -> None:
+    result = pipeline._block_ablation_oos(per_fold_oos_data, blocks=STRONG_BLOCK)
+
+    assert result is not None
+    assert list(result["variant"]) == ["masked", "retrained"]
+    assert set(result["block"]) == {"strong"}
+    assert (result["n_removed"] == 1).all()
+    assert {
+        "roc_full",
+        "roc_variant",
+        "delta_roc",
+        "delta_roc_ci_lo",
+        "delta_roc_ci_hi",
+        "pr_full",
+        "pr_variant",
+        "delta_pr",
+        "delta_pr_ci_lo",
+        "delta_pr_ci_hi",
+        "nb_t_roc",
+        "nb_p_roc",
+        "nb_t_pr",
+        "nb_p_pr",
+    }.issubset(result.columns)
+    assert (pipeline.output_dir / "block_ablation_oos.csv").exists()
+
+    predictions = pd.read_csv(
+        pipeline.output_dir / "block_ablation_oos_predictions.csv"
+    )
+    n_total = sum(len(f["y_te"]) for f in per_fold_oos_data)
+    assert len(predictions) == n_total
+    assert list(predictions.columns) == [
+        "fold",
+        "y_true",
+        "y_full",
+        "y_strong_masked",
+        "y_strong_retrained",
+    ]
+    assert sorted(predictions["fold"].unique()) == [1, 2, 3]
+
+
+def test_block_ablation_oos_full_model_matches_the_single_modality_ablation(
+    pipeline: PCCMultimodalPipeline,
+    per_fold_oos_data: list[PerFoldOoS],
+) -> None:
+    """Same concatenation order, so the full-model reference is the same number."""
+    single = pipeline._modality_ablation_oos(per_fold_oos_data)
+    block = pipeline._block_ablation_oos(per_fold_oos_data, blocks=STRONG_BLOCK)
+
+    assert single is not None
+    assert block is not None
+    assert block["roc_full"].iloc[0] == pytest.approx(single["roc_auc_full"].iloc[0])
+    assert block["pr_full"].iloc[0] == pytest.approx(single["pr_auc_full"].iloc[0])
+
+
+def test_block_ablation_oos_removing_the_strong_modality_costs_discrimination(
+    pipeline: PCCMultimodalPipeline,
+    per_fold_oos_data: list[PerFoldOoS],
+) -> None:
+    result = pipeline._block_ablation_oos(per_fold_oos_data, blocks=STRONG_BLOCK)
+
+    assert result is not None
+    assert (result["delta_pr"] > 0).all()
+    assert (result["delta_roc"] > 0).all()
+    assert (result["delta_pr_ci_lo"] <= result["delta_pr"]).all()
+    assert (result["delta_pr"] <= result["delta_pr_ci_hi"]).all()
+    assert ((result["nb_p_pr"] >= 0) & (result["nb_p_pr"] <= 1)).all()
+
+
+def test_block_ablation_oos_retrains_the_meta_learner_on_the_remaining_columns(
+    pipeline: PCCMultimodalPipeline,
+    per_fold_oos_data: list[PerFoldOoS],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The retrained learner sees the two survivors, with the run's search width."""
+    seen: list[tuple[list[str], int, int]] = []
+    original = orchestration.train_meta_learner
+
+    def recording(oof: np.ndarray, y: np.ndarray, names: list[str], **kw: Any) -> Any:
+        seen.append((list(names), oof.shape[1], kw["hyperparam_iterations"]))
+        return original(oof, y, names, **kw)
+
+    monkeypatch.setattr(orchestration, "train_meta_learner", recording)
+    pipeline._block_ablation_oos(per_fold_oos_data, blocks=STRONG_BLOCK)
+
+    assert len(seen) == len(per_fold_oos_data)
+    for names, n_columns, iterations in seen:
+        assert names == ["demographics", "cognitive"]
+        assert n_columns == 2
+        assert iterations == pipeline.hyperparam_iterations
+
+
+def test_block_ablation_oos_empty_folds(
+    pipeline: PCCMultimodalPipeline,
+) -> None:
+    """Empty fold list returns None silently (distributed runs)."""
+    assert pipeline._block_ablation_oos([]) is None
+
+
+def test_block_ablation_oos_skips_a_run_without_the_block(
+    pipeline: PCCMultimodalPipeline,
+    per_fold_oos_data: list[PerFoldOoS],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A Lean stack carries no MRI: warn and skip, do not abort the run."""
+    with caplog.at_level("WARNING"):
+        result = pipeline._block_ablation_oos(per_fold_oos_data)
+
+    assert result is None
+    assert "'mri'" in caplog.text
+    assert not (pipeline.output_dir / "block_ablation_oos.csv").exists()
+
+
+def test_resolve_ablation_blocks_collects_every_prefixed_modality() -> None:
+    names = ["demographics", "mri_desikan", "ses", "mri_yeo", "mental_health"]
+    assert resolve_ablation_blocks(names, {"mri": "mri_"}) == {
+        "mri": ["mri_desikan", "mri_yeo"]
+    }
+
+
+def test_resolve_ablation_blocks_rejects_a_prefix_that_matches_nothing() -> None:
+    with pytest.raises(ValueError, match="'mri'"):
+        resolve_ablation_blocks(["demographics", "ses"], {"mri": "mri_"})
 
 
 # ------------------------------------------------------------------
@@ -446,7 +584,6 @@ def test_hyperparameter_search_width_reaches_the_meta_learner(
         orthogonalize=False,
         n_jobs=1,
         meta_permutation_iterations=0,
-        n_subsamples=5,
         n_bootstrap_eval=10,
         hyperparam_iterations=0,
     )
@@ -923,7 +1060,6 @@ def test_distributed_fold_roundtrip(tmp_path: Path) -> None:
         "random_state": 42,
         "n_jobs": 1,
         "meta_permutation_iterations": 0,
-        "n_subsamples": 10,
     }
 
     # --- A: Full single-machine run ---

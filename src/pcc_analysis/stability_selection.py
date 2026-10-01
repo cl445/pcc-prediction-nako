@@ -1,4 +1,12 @@
-"""Stability selection via subsampled L1 regularization."""
+"""Stability selection via subsampled L1 regularization.
+
+No pipeline builds this step any more. At the threshold the factory used it
+kept every feature in all 3,036 calls of the ten orthogonalised runs, so it
+was removed from the modality pipelines (DECISIONS.md §2.33). The class stays at
+this import path because the ``final_model.pkl`` of every run recorded before
+that change contains fitted instances of it, and ``03_apply_transfer.py``
+unpickles one of them.
+"""
 
 from __future__ import annotations
 

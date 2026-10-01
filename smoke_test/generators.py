@@ -513,10 +513,8 @@ def _generate_ses(
     # Derive deterministic columns
     if "household_size" in df.columns:
         df["living_alone"] = _to_int8((df["household_size"] == 1).to_numpy())
-    if "number_children" in df.columns:
-        df["has_children"] = _to_int8((df["number_children"] > 0).to_numpy())
-    if "income_weighted" in df.columns and "needs_weighted" in df.columns:
-        df["income_adequacy"] = df["income_weighted"] / df["needs_weighted"]
+    if "children_under14_household" in df.columns:
+        df["has_children"] = _to_int8((df["children_under14_household"] > 0).to_numpy())
 
     sys_frac = mod_profile.get("systematic_missing_frac", 0.0)
     _inject_missingness(df, rng, col_profiles, systematic_missing_frac=sys_frac)
@@ -557,10 +555,6 @@ def _generate_medical_history(
         df["overweight"] = _to_int8((df["bmi_self_reported"] >= 25).to_numpy())
         df["obese"] = _to_int8((df["bmi_self_reported"] >= 30).to_numpy())
 
-    # Derive hypertension flag
-    if "hypertension_current" in df.columns:
-        df["has_hypertension"] = _to_int8((df["hypertension_current"] == 1).to_numpy())
-
     # Cancer history
     cancer_cols = [
         c for c in df.columns if c.startswith("cancer_") and c.endswith("_age")
@@ -578,16 +572,14 @@ def _generate_medical_history(
             df[infection_cols].notna().any(axis=1).to_numpy()
         )
 
-    # Surgery history
-    surgery_cols = [
-        c
-        for c in df.columns
-        if c.startswith("surgery_general_anesthesia_") and c.endswith("_age")
+    # Cardiovascular procedures
+    procedure_cols = [
+        c for c in df.columns if c.startswith("cv_procedure_") and c.endswith("_age")
     ]
-    if surgery_cols:
-        n_surg = df[surgery_cols].notna().sum(axis=1).to_numpy()
-        df["number_surgeries"] = _to_int8(n_surg)
-        df["has_surgery_history"] = _to_int8(n_surg > 0)
+    if procedure_cols:
+        n_proc = df[procedure_cols].notna().sum(axis=1).to_numpy()
+        df["number_cv_procedures"] = _to_int8(n_proc)
+        df["has_cv_procedure"] = _to_int8(n_proc > 0)
 
     # Medication count
     med_cols = [c for c in df.columns if c.startswith("medication_")]
@@ -599,7 +591,13 @@ def _generate_medical_history(
 
     # Neurological disease
     neuro_cols = [
-        c for c in ["stroke_age", "epilepsy_age", "parkinsons_age"] if c in df.columns
+        c
+        for c in [
+            "stroke_years_since",
+            "epilepsy_years_since",
+            "parkinsons_years_since",
+        ]
+        if c in df.columns
     ]
     if neuro_cols:
         df["has_neurological_disease"] = _to_int8(
@@ -678,7 +676,7 @@ def _generate_mental_health(
 
     if "gad7_sum" in df.columns:
         df["gad7_moderate_anxiety"] = _ge("gad7_sum", 10)
-        df["gad7_diagnosis"] = _to_int8(
+        df["gad7_severity_category"] = _to_int8(
             np.digitize(df["gad7_sum"].fillna(0).to_numpy(), [5, 10, 15]).astype(
                 np.int8
             )

@@ -398,15 +398,14 @@ class ModalityPreprocessor(FrameTransformer):
 def create_ses_preprocessor() -> ModalityPreprocessor:
     return ModalityPreprocessor(
         nominal_columns=["isco_major", "isco_submajor"],
-        date_columns=["employment_date"],
+        date_columns=["unemployment_start_date"],
         drop_columns=[
             # Reference categories
             "retired",
             "widowed",
             "has_partner",
-            # Components of income_adequacy
-            "income_weighted",
-            "needs_weighted",
+            # Input to equivalised_income, which NAKO has already divided
+            "needs_weight",
             # Nominal originals (dummies exist)
             "marital_status",
             "employment_status",
@@ -461,8 +460,8 @@ def create_medical_history_preprocessor() -> ModalityPreprocessor:
       ``body_fat_percentage``), ``bmi_category`` (ordinal recode of
       the same), ``number_medications`` and ``polypharmacy`` (zero-
       variance / heavy-skew aggregates of the medication binaries),
-      ``has_surgery_history`` (perfectly collinear with
-      ``number_surgeries`` per the 2026-04-27 audit profile),
+      ``has_cv_procedure`` (perfectly collinear with
+      ``number_cv_procedures`` per the 2026-04-27 audit profile),
       ``has_cancer_history`` (highly collinear with
       ``number_cancers``).
     - **Near-constant medication binaries**: medications endorsed by
@@ -493,7 +492,7 @@ def create_medical_history_preprocessor() -> ModalityPreprocessor:
             "bmi_category",
             "number_medications",
             "polypharmacy",
-            "has_surgery_history",
+            "has_cv_procedure",
             "has_cancer_history",
             # Sparsity drops (<1 % positive in analytic sample).
             "medication_antiparkinson",
@@ -508,7 +507,10 @@ def create_cognitive_preprocessor() -> ModalityPreprocessor:
             "word_list_learning",
             "word_list_forgetting",
             "stroop_interference_effect",
-            "cognitive_composite_score",
+            # Six distinct values and no association with age, education or
+            # any other test (all |r| <= 0.01 on the full cohort, 2026-09-28),
+            # so it carries no ability signal as delivered (DECISIONS §2.34).
+            "number_series_ability",
         ],
     )
 
@@ -518,7 +520,7 @@ def create_lung_function_preprocessor() -> ModalityPreprocessor:
 
     Drops absolute volumes (``fev1``, ``fvc``) in favour of the
     height/age/sex-standardised percent-predicted versions.
-    Also drops the GLI-2012 reference values (``fev1_predicted_l``,
+    Also drops the predicted reference values (``fev1_predicted_l``,
     ``fvc_predicted_l``) — those are deterministic functions of
     age × sex × height (correlation ~0.99 with each other) and after
     DML orthogonalisation against age/sex/centre they reduce to a
@@ -559,10 +561,10 @@ def create_mental_health_preprocessor() -> ModalityPreprocessor:
             "gad7_moderate_anxiety",
             "phq_stress_moderate",
             # Ordinal categories redundant with the matching sum scores
-            # (gad7_diagnosis correlates 0.91 with gad7_sum, mirroring the
+            # (gad7_severity_category correlates 0.91 with gad7_sum, mirroring the
             # phq9 case).
             "phq9_severity_category",
-            "gad7_diagnosis",
+            "gad7_severity_category",
             # Imputed version of MINI diagnosis (keep original)
             "mini_major_depression_imputed",
             # Constant (value 8 for all participants) — zero variance

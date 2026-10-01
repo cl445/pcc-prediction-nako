@@ -239,7 +239,8 @@ def test_ses_preprocessor_drops_expected_columns() -> None:
     prep = create_ses_preprocessor()
     assert prep.drop_columns is not None
     assert "retired" in prep.drop_columns
-    assert "income_weighted" in prep.drop_columns
+    assert "needs_weight" in prep.drop_columns
+    assert "equivalised_income" not in prep.drop_columns
 
 
 def test_demographics_preprocessor_has_nominal_columns() -> None:

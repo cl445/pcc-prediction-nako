@@ -83,8 +83,7 @@ All binary flag variables use `boolean` dtype.
 | `retired` | Reference category for employment status (employed, unemployed retained) |
 | `widowed` | Reference category for marital status (married, single, divorced_separated retained) |
 | `has_partner` | Redundant with marital status dummies |
-| `income_weighted` | Component of `income_adequacy` (= income_weighted / needs_weighted) |
-| `needs_weighted` | Component of `income_adequacy` (= income_weighted / needs_weighted) |
+| `needs_weight` | NAKO's needs weight; already divided out of `equivalised_income` (= household net income / needs weight, `a_ses_incgw`). Until 2026-09-28 the pipeline divided by it a second time in an `income_adequacy` feature (DECISIONS §2.34). |
 | `marital_status` | Nominal original; dummies (`married`, `single`, `divorced_separated`) retained |
 | `employment_status` | Nominal original; dummies (`employed`, `unemployed`) retained |
 | `occupation_status` | Worker/employee/civil servant/self-employed; `isco_submajor` provides finer granularity |
@@ -109,17 +108,20 @@ All binary flag variables use `boolean` dtype.
 
 ### Final schema (27 features after drops + ID)
 
-**Extraction (19):** `household_size`, `number_children`,
+**Extraction (20):** `household_size`, `children_under14_household`,
 `work_hours_category`, `is_self_employed`, `number_employees`,
-`education_isced_level`, `education_years`, `german_education_level`,
-`income_category`, `income_position`,
+`education_isced_level`, `education_years`, `german_language_proficiency`,
+`income_category`, `income_position`, `equivalised_income`,
 `isco_major`, `isco_submajor`, `isei_score`, `siops_score`,
-`kldb_skill_level`, `retirement_age`, `employment_duration_years`,
-`employment_duration_total`, `employment_date`
+`kldb_skill_level`, `retirement_age`, `unemployment_duration_current_years`,
+`unemployment_duration_total_years`, `unemployment_start_date`
 
-**Derivation (8):** `employed`, `unemployed`, `married`, `single`,
-`divorced_separated`, `living_alone`, `has_children`,
-`income_adequacy`
+**Derivation (7):** `employed`, `unemployed`, `married`, `single`,
+`divorced_separated`, `living_alone`, `has_children`
+
+`employment_status == 3` is NAKO's "Nichterwerbsperson" (not in the labour
+force), not retirement alone; the derived `retired` column keeps its name but
+is dropped as the reference category.
 
 ---
 
@@ -129,9 +131,13 @@ All binary flag variables use `boolean` dtype.
 
 ### Parquet contents (12 features + ID)
 
-All 12 NAKO neuropsychological test variables, including the composite score
-(`cognitive_composite_score` from `a_npsy_sumts6`), difference scores, and
-individual test scores.
+All 12 NAKO neuropsychological test variables: difference scores and
+individual test scores, including the Purdue Pegboard (`purdue_pegboard_pairs`
+from `a_npsy_sumts5`) and the number-series ability parameter
+(`number_series_ability` from `a_npsy_sumts6`). Until 2026-09-28 the latter
+was called `cognitive_composite_score` and dropped as a composite, while the
+pegboard ran as `number_series` (DECISIONS §2.34). The number-series parameter
+is still dropped, for the reason given below.
 
 ### Dropped in pipeline preprocessor (4)
 
@@ -140,7 +146,7 @@ individual test scores.
 | `word_list_learning` | Difference score (recall2 − recall1), linearly dependent on retained raw scores |
 | `word_list_forgetting` | Difference score (recall2 − delayed), linearly dependent on retained raw scores |
 | `stroop_interference_effect` | Difference score (interference − colors), linearly dependent on retained raw scores |
-| `cognitive_composite_score` | NAKO-provided weighted linear combination of individual test scores; a regularised model learns its own optimal weighting |
+| `number_series_ability` | NAKO's ability parameter for the six-item adaptive number-series test. As delivered it takes six distinct values and is unrelated to age (r = 0.01), education (r = 0.00) and every other test (\|r\| ≤ 0.01), while the other tests show the expected associations; it carries no ability signal (DECISIONS §2.34) |
 
 These difference scores are exact linear combinations of their component
 scores, which are all retained.  A regularised linear model can recover
@@ -152,7 +158,7 @@ these contrasts from the raw inputs.
 **Verbal fluency:** `verbal_fluency_animals`
 **Stroop:** `stroop_colors_time`, `stroop_interference_time`
 **Working memory:** `digit_span_backwards`
-**Reasoning:** `number_series`
+**Fine motor:** `purdue_pegboard_pairs`
 
 ---
 
@@ -182,7 +188,14 @@ WHO physical activity guidelines are also MET-based.
 
 ### Final schema (17 features after drops + ID)
 
-`occupational_activity_level`, `household_minutes_week`,
+`occupational_activity_level` is QUAP's `a_quap_beruf` as coded by NAKO:
+1 = not currently employed, 2–7 = sedentary to very strenuous work. It
+enters as a numeric feature, so not employed ranks as the lowest
+occupational activity; QUAP non-respondents are zero-filled with the rest of
+the block. QUAP durations are minutes per day, MET values MET-minutes per
+week.
+
+`occupational_activity_level`, `household_minutes_day`,
 `active_transport_summer`, `active_transport_winter`,
 `walking_summer`, `walking_winter`, `cycling_summer`, `cycling_winter`,
 `met_sports_combined`, `sitting_weekday`, `sitting_saturday`,
@@ -265,8 +278,9 @@ percent-predicted equivalents, the FEV1/FVC ratio (`fev1_fvc_ratio` from
 | `fvc` | Subsumed by `fvc_percent_predicted` (reference-normalised, includes height correction) |
 | `fev1_fvc_ratio` | Exact quotient of `fev1` / `fvc`; the model can learn this ratio from the inputs |
 
-The percent-predicted values correct for age, sex, **and height** using
-GLI-2012 reference equations.  While age and sex are handled by the
+The percent-predicted values correct for age, sex, **and height** against
+NAKO's predicted values ("Sollwert"); the handbook does not name the
+reference equation.  While age and sex are handled by the
 orthogonalisation step (confounders), height is not included elsewhere
 in the model.  Keeping only percent-predicted retains the height
 information that absolute volumes would lose after orthogonalisation.
@@ -291,8 +305,12 @@ the parquet file (exact count depends on the cohort).
 NAKO stores binary disease and medication flags using integer coding
 (1=yes, 2=no or 0/1).  All are converted to `boolean` dtype:
 
-- **Disease flags:** `has_hypertension`, `has_psoriasis`,
-  `has_psoriasis_arthritis`
+- **Disease flags:** `has_hypertension` (`d_an_cv_6`, doctor-diagnosed
+  high blood pressure), `has_atopic_eczema` (`a_hte_ad_cur`), `has_psoriasis`,
+  `has_psoriasis_arthritis`. Until 2026-09-28 `has_hypertension` held
+  `a_hte_ad_cur` (DECISIONS §2.34).
+- **Missing answers:** a flag is true only for code 1, so "don't know",
+  "no answer" and missing all count as no.
 - **Medications:** `medication_antihypertensive`, `medication_antiparkinson`,
   `medication_antiepileptic`, `medication_antidiabetic`,
   `medication_betablocker`, `medication_lipid_lowering`,
@@ -306,17 +324,21 @@ NAKO stores binary disease and medication flags using integer coding
 | `bmi_self_reported` | Height + weight retained; BMI = weight/height² is derivable |
 | `bmi_category` | Ordinal binning of BMI (now dropped with BMI itself) |
 | `number_medications` | Count variable; individual medication flags retained |
-| `polypharmacy` | Binary threshold (≥5) of `number_medications` |
-| `has_surgery_history` | Redundant with `number_surgeries` (>0 equivalent) |
+| `polypharmacy` | At least 5 of the 7 recorded drug classes (`number_medications` ≥ 5), not 5 medications |
+| `has_cv_procedure` | Redundant with `number_cv_procedures` (>0 equivalent) |
 | `has_cancer_history` | Redundant with `number_cancers` (>0 equivalent) |
 
 ### Retained: Age-at-event variables
 
-Individual `cancer_N_age`, `infection_*_age`, `surgery_*_age`, and
-neurological `*_age` columns encode both whether an event occurred (non-null)
-and when.  The count variables `number_cancers` and `number_surgeries`
-aggregate these (the corresponding boolean flags `has_cancer_history` and
-`has_surgery_history` are dropped as redundant — see above).
+Individual `cancer_N_age`, `infection_*_age` and `cv_procedure_*_age`
+columns, and the neurological `*_years_since` columns, encode both whether an
+event occurred (non-null) and when. `cv_procedure_*` are NAKO's
+cardiovascular procedures (heart valve, PTCA, cardiac bypass, pacemaker, leg
+artery dilatation or bypass, carotid), not surgery in general; the
+neurological columns count years since the first event, not age at it. The
+count variables `number_cancers` and `number_cv_procedures` aggregate these
+(the corresponding boolean flags `has_cancer_history` and `has_cv_procedure`
+are dropped as redundant — see above).
 High-missingness columns (>50% missing in the analysis sample) are dropped
 at pipeline runtime by `MissingnessThreshold`.
 
@@ -433,13 +455,15 @@ and relies solely on elastic net regularisation in the classifier.
 | Yeo 7-Network | 96 | Yes |
 | Cerebellar | 12 | No |
 
-Stability selection is **not** used for MRI modalities.  Brain regional
-volumes are highly correlated (bilateral homologues r > 0.8, neighbouring
-regions r > 0.6).  L1-based stability selection arbitrarily picks one
-variable from a correlated group and zeros the rest; across bootstrap
-samples different regions get selected, diluting every region's selection
-probability below the threshold (Zou & Hastie 2005; confirmed in GWAS
-literature for correlated features).  Instead, elastic net regularisation
-in the classifier handles both feature selection (L1 component) and
-correlated-feature grouping (L2 component) in a single step, which is
-the standard approach in the neuroimaging prediction literature.
+No pipeline carries a separate feature-selection step.  It would be a poor
+fit for the MRI modalities in particular: brain regional volumes are highly
+correlated (bilateral homologues r > 0.8, neighbouring regions r > 0.6), and
+an L1-based selector arbitrarily picks one variable from a correlated group
+and zeros the rest, so across resamples different regions get selected and
+every region's selection probability is diluted (Zou & Hastie 2005; confirmed
+in GWAS literature for correlated features).  Elastic net regularisation in
+the classifier instead handles both feature selection (L1 component) and
+correlated-feature grouping (L2 component) in a single step, which is the
+standard approach in the neuroimaging prediction literature.  The stage that
+used to run for the six larger non-MRI modalities was removed (`DECISIONS.md`
+§2.33).

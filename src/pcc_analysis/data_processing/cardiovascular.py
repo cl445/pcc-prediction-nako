@@ -48,13 +48,15 @@ def _extract_cardiovascular(df: DataFrame) -> DataFrame:
     if "vae_ex_r_abi" in df.columns:
         r["ankle_brachial_index_right"] = df["vae_ex_r_abi"]
 
-    # Replace NAKO sentinel codes. Exclude -5 for augmentation_index because
-    # it falls within the valid physiological range (approx. -21 to +48).
+    # Replace NAKO sentinel codes. The vascular-explorer columns carry no
+    # NAKO code list, and -5 and -9 are real augmentation-index readings
+    # inside its valid range, so they stay; -88 and the other negative
+    # codes fall outside the plausibility range and are caught there.
     for col in r.columns:
         if col == "ID":
             continue
         codes = (
-            [c for c in NAKO_MISSING_CODES if c != -5]
+            [c for c in NAKO_MISSING_CODES if c not in (-5, -9)]
             if col == "augmentation_index"
             else NAKO_MISSING_CODES
         )

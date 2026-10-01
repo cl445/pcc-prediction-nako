@@ -156,11 +156,11 @@ class FoldArtifact(TypedDict):
 class PerFoldOoS(TypedDict):
     """In-memory per-fold artifacts for out-of-sample meta-learner analyses.
 
-    Carries the data needed by ``_modality_ablation_oos`` and
-    ``_incremental_performance_oos``: the train-fold stacking matrix the
-    fold-specific meta-learner was trained on, the test-fold base-learner
-    predictions the meta-learner has never seen, and the fitted meta-learner
-    itself.
+    Carries the data needed by ``_modality_ablation_oos``,
+    ``_block_ablation_oos`` and ``_incremental_performance_oos``: the
+    train-fold stacking matrix the fold-specific meta-learner was trained on,
+    the test-fold base-learner predictions the meta-learner has never seen,
+    and the fitted meta-learner itself.
     """
 
     fold_idx: int
@@ -208,7 +208,6 @@ class PipelineConfig(TypedDict):
     split_mh_submodalities: bool
     amendment_features: bool
     hyperparam_iterations: int
-    n_subsamples: int
 
 
 class PipelineResult(TypedDict):
@@ -221,6 +220,7 @@ class PipelineResult(TypedDict):
     shap_results: ShapResults | None
     modality_ablation: pd.DataFrame | None
     modality_ablation_oos: pd.DataFrame | None
+    block_ablation_oos: pd.DataFrame | None
     incremental_performance: pd.DataFrame | None
     incremental_performance_oos: pd.DataFrame | None
     evaluation: EvaluationResult

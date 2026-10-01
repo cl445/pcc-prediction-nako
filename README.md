@@ -7,7 +7,7 @@ Reproducible analysis pipeline for the paper: *"Pre-Infection Mental Health, but
 This repository contains the complete analysis pipeline that:
 
 1. **Processes** raw NAKO cohort data (demographics, MRI, lab values, etc.) into analysis-ready Parquet files
-2. **Runs** a nested 10×5 cross-validation pipeline with per-modality base learners, stability selection, DML orthogonalization, and XGBoost meta-learner
+2. **Runs** a nested 10×5 cross-validation pipeline with per-modality base learners, DML orthogonalization, and XGBoost meta-learner
 3. **Generates** all paper figures (evaluation curves, decision curve analysis, modality contributions)
 4. **Computes** descriptive statistics and LaTeX tables
 
@@ -113,8 +113,8 @@ The graph is:
 
 The primary analysis and its sensitivity variants are all produced by
 `scripts/pipeline/02_run_pipeline.py` with CLI flags. `run_analysis.sh` passes
-`--output-dir results/runs/<name>` for each; the 10×5 nested CV, stability
-selection, and XGBoost hyperparameter search are otherwise identical.
+`--output-dir results/runs/<name>` for each; the 10×5 nested CV and the
+XGBoost hyperparameter search are otherwise identical.
 
 | Configuration | Run dir | Command |
 |---|---|---|
@@ -197,9 +197,9 @@ longest run across both machines saves around 10 % of the makespan over the
 configuration split, and it puts folds from two machines into one model.
 Two caveats if you do it anyway — copy only the `fold_*.pkl` files, not the
 directories, so the fold runs' `provenance.json` is not overwritten; and a
-merged run has no `modality_ablation_oos.csv` or
-`incremental_performance_oos.csv` (DECISIONS §2.19), which no paper artifact
-reads.
+merged run has no `modality_ablation_oos.csv`, `block_ablation_oos.csv` or
+`incremental_performance_oos.csv` (DECISIONS §2.19), of which only the block
+ablation feeds a paper artifact (`scripts/supplementary/block_ablation.py`).
 
 The two **control** configurations are not sensitivity analyses. They hold the
 specification at the earlier one — the pre-amendment feature set and the
@@ -356,7 +356,7 @@ particular variable.
 │   ├── preprocessing.py         # Categorical encoding, type handling
 │   ├── modality_pipelines.py    # Per-modality sklearn pipelines
 │   ├── orthogonalization.py     # DML confounder removal
-│   ├── stability_selection.py   # Bootstrap L1 feature selection
+│   ├── stability_selection.py   # Unused; kept so old final_model.pkl unpickle
 │   ├── meta_learner.py          # OoF stacking + XGBoost meta-learner
 │   ├── orchestration.py         # Nested CV pipeline orchestration
 │   ├── evaluation.py            # Metrics, bootstrap CIs, DCA
@@ -442,8 +442,8 @@ Post-COVID Condition: A Population-Based Cohort Study in the German National
 Cohort (NAKO). medRxiv 2026.09.09.26362611 [Preprint]. Posted 2026-09-10.
 https://doi.org/10.64898/2026.09.09.26362611
 
-The code behind that preprint is tagged `v1.1.0` in this repository.
-
+Version 1 of the preprint was produced with the code tagged `v1.1.0` in this
+repository, version 2 with `v1.2.0`.
 
 ## License
 

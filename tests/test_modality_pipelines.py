@@ -15,16 +15,12 @@ from pcc_analysis.stability_selection import StabilitySelector
 
 @pytest.fixture
 def factory() -> ModalityPipelineFactory:
-    return ModalityPipelineFactory(
-        random_state=42, orthogonalize=True, cv=3, n_jobs=1, n_subsamples=10
-    )
+    return ModalityPipelineFactory(random_state=42, orthogonalize=True, cv=3, n_jobs=1)
 
 
 @pytest.fixture
 def factory_no_ortho() -> ModalityPipelineFactory:
-    return ModalityPipelineFactory(
-        random_state=42, orthogonalize=False, cv=3, n_jobs=1, n_subsamples=10
-    )
+    return ModalityPipelineFactory(random_state=42, orthogonalize=False, cv=3, n_jobs=1)
 
 
 # -- Helper ------------------------------------------------------------------
@@ -38,7 +34,7 @@ def _has_step_type(pipeline: Pipeline, cls: type) -> bool:
     return any(isinstance(step, cls) for _, step in pipeline.steps)
 
 
-# -- Demographics (no orthogonalization, no stability selection) --------------
+# -- Demographics (no orthogonalization) --------------------------------------
 
 
 def test_demographics_pipeline_structure(factory: ModalityPipelineFactory) -> None:
@@ -74,41 +70,40 @@ def test_ses_pipeline_no_ortho(factory_no_ortho: ModalityPipelineFactory) -> Non
 # -- Cognitive ---------------------------------------------------------------
 
 
-def test_cognitive_pipeline_has_stability(factory: ModalityPipelineFactory) -> None:
+def test_cognitive_pipeline_orthogonalizes(factory: ModalityPipelineFactory) -> None:
     pipe = factory.create_cognitive_pipeline()
-    assert _has_step_type(pipe, StabilitySelector)
     assert _has_step_type(pipe, Orthogonalizer)
 
 
-# -- Physical Activity -------------------------------------------------------
+# -- Feature selection stage -------------------------------------------------
 
 
-def test_physical_activity_pipeline_has_stability(
-    factory: ModalityPipelineFactory,
+@pytest.mark.parametrize(
+    "builder",
+    [
+        "create_demographics_pipeline",
+        "create_ses_pipeline",
+        "create_cognitive_pipeline",
+        "create_physical_activity_pipeline",
+        "create_medical_history_pipeline",
+        "create_lab_values_pipeline",
+        "create_cardiovascular_pipeline",
+        "create_lung_function_pipeline",
+        "create_mental_health_pipeline",
+        "create_mri_pipeline",
+    ],
+)
+def test_no_pipeline_carries_a_feature_selector(
+    factory: ModalityPipelineFactory, builder: str
 ) -> None:
-    pipe = factory.create_physical_activity_pipeline()
-    assert _has_step_type(pipe, StabilitySelector)
+    """The stage kept every feature it ever saw and was removed; if one of the
+    builders grows a selector again, it has to be argued for rather than
+    reappear."""
+    pipe = getattr(factory, builder)()
+    assert not _has_step_type(pipe, StabilitySelector)
 
 
-# -- Medical History ---------------------------------------------------------
-
-
-def test_medical_history_pipeline_has_stability(
-    factory: ModalityPipelineFactory,
-) -> None:
-    pipe = factory.create_medical_history_pipeline()
-    assert _has_step_type(pipe, StabilitySelector)
-
-
-# -- Lab Values --------------------------------------------------------------
-
-
-def test_lab_values_pipeline_has_stability(factory: ModalityPipelineFactory) -> None:
-    pipe = factory.create_lab_values_pipeline()
-    assert _has_step_type(pipe, StabilitySelector)
-
-
-# -- Cardiovascular (no preprocessor, no stability selection) ----------------
+# -- Cardiovascular (no preprocessor) ----------------------------------------
 
 
 def test_cardiovascular_pipeline_structure(factory: ModalityPipelineFactory) -> None:

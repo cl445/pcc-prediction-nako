@@ -84,7 +84,6 @@ def trained_lean_run(tmp_path: Path) -> Path:
         random_state=42,
         n_jobs=1,
         meta_permutation_iterations=0,
-        n_subsamples=10,
         n_bootstrap_eval=50,
         cohort="mri",
         stack_variant="lean",

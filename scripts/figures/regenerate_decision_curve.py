@@ -21,8 +21,9 @@ def plot_dca(dca_df: pd.DataFrame) -> Figure:
     """Plot DCA with zoomed axes on the clinically relevant range."""
     fig, ax = plt.subplots(figsize=(6.30, 2.8))
 
-    # Clip to relevant threshold range
-    mask = dca_df["threshold"] <= 0.50
+    # Clip to the relevant threshold range, wide enough to show where the
+    # model stops beating both default strategies (about 0.6).
+    mask = dca_df["threshold"] <= 0.70
     df = dca_df[mask]
 
     # Model
@@ -72,7 +73,7 @@ def plot_dca(dca_df: pd.DataFrame) -> Figure:
             label="_nolegend_",
         )
 
-    ax.set_xlim(0, 0.50)
+    ax.set_xlim(0, 0.70)
     ax.set_ylim(-0.15, 0.15)
 
     ax.set_xlabel("Threshold Probability")

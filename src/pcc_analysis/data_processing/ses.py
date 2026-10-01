@@ -30,7 +30,7 @@ def _extract_ses(df: DataFrame) -> DataFrame:
     r["marital_status"] = df["a_ses_famst"]
     r["has_partner"] = (df["a_ses_partner"] == 1).astype("boolean")
     r["household_size"] = df["a_ses_househ"]
-    r["number_children"] = df["a_ses_child"]
+    r["children_under14_household"] = df["a_ses_child"]
 
     # Employment
     r["employment_status"] = df["a_ses_ewstat"]
@@ -41,13 +41,15 @@ def _extract_ses(df: DataFrame) -> DataFrame:
     # Education (ISCED 1997)
     r["education_isced_level"] = df["a_ses_isced97_level"]
     r["education_years"] = df["a_ses_isced97_years"]
-    r["german_education_level"] = df["a_ses_deutsch"]
+    r["german_language_proficiency"] = df["a_ses_deutsch"]
 
     # Income
     r["income_category"] = df["a_ses_inc"]
     r["income_position"] = df["a_ses_incpos"]
-    r["income_weighted"] = df["a_ses_incgw"]
-    r["needs_weighted"] = df["a_ses_bedarfgw"]
+    # Net equivalised income: household net income divided by the needs
+    # weight, already computed by NAKO.
+    r["equivalised_income"] = df["a_ses_incgw"]
+    r["needs_weight"] = df["a_ses_bedarfgw"]
 
     # Occupational classification and prestige
     _isco_major_labels: dict[int, str] = {
@@ -87,19 +89,18 @@ def _extract_ses(df: DataFrame) -> DataFrame:
 
     # Additional
     r["retirement_age"] = df["a_ses_rentenalter"]
-    r["employment_duration_years"] = df["a_ses_el_seit_j"]
-    r["employment_duration_total"] = df["a_ses_el_gesamt"]
+    r["unemployment_duration_current_years"] = df["a_ses_el_seit_j"]
+    r["unemployment_duration_total_years"] = df["a_ses_el_gesamt"]
     # NAKO encodes "no employment / not applicable" as the Excel-style
     # placeholder 1900-01-05 (carrying ~98 % of all rows in the analytic
     # sample as of 2026-04). Map it to NaT so the downstream date-feature
     # extractor sees an honest missing value rather than a 1900 timestamp
     # that gets turned into year/month features ≈ constants.
-    employment_date = df["a_ses_el_datum"]
+    unemployment_start = df["a_ses_el_datum"]
     sentinel_mask = (
-        employment_date.astype("string").str.startswith("1900-01-05").fillna(False)
+        unemployment_start.astype("string").str.startswith("1900-01-05").fillna(False)
     )
-    employment_date = employment_date.mask(sentinel_mask)
-    r["employment_date"] = employment_date
+    r["unemployment_start_date"] = unemployment_start.mask(sentinel_mask)
 
     return _replace_nako_missing(r)
 
@@ -116,9 +117,7 @@ def _derive_ses_metrics(df: DataFrame) -> DataFrame:
     df["widowed"] = (df["marital_status"] == 5).astype("boolean")
 
     df["living_alone"] = (df["household_size"] == 1).astype("boolean")
-    df["has_children"] = (df["number_children"] > 0).astype("boolean")
-
-    df["income_adequacy"] = df["income_weighted"] / df["needs_weighted"]
+    df["has_children"] = (df["children_under14_household"] > 0).astype("boolean")
 
     return df
 

@@ -263,7 +263,6 @@ def get_pipeline_config(
         "random_state": 42,
         "n_jobs": -1,
         "meta_permutation_iterations": 1000,
-        "n_subsamples": 100,
         "n_bootstrap": 1000,
     }
     defaults.update(config.get("pipeline", {}))

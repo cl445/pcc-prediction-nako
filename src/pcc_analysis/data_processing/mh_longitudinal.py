@@ -4,8 +4,9 @@ Long-format parquet with one row per participant x wave:
 
   wave = "T0"  -> Baseline (2014..2019); only pre-computed sums are
                   available (NAKO ``a_emo_phq9_sum`` / ``a_emo_gad7_sum``),
-                  per-item PHQ-9/GAD-7 columns are NA because the raw
-                  items are not in our data-access profile.
+                  per-item PHQ-9/GAD-7 columns are NA in this panel. The
+                  baseline PHQ-9 items delivered with NAM-45 are processed
+                  separately (``phq9_items.py``) and not merged here.
   wave = "T1"  -> Corona-1 mail-in questionnaire (2020); raw items are
                   ``d_co1_phq91_1..9`` (PHQ-9) and ``d_co1_gad7_1..7``
                   (GAD-7), encoded 1..4; rescaled to canonical 0..3.

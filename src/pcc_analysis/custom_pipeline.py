@@ -53,8 +53,8 @@ class ConfoundedPipeline(Pipeline):
         """
         self._confounders = confounders
 
-        # Extract sample_weight so transformer steps that support it
-        # (e.g. StabilitySelector's internal estimator) can receive it.
+        # Extract sample_weight so transformer steps that support it can
+        # receive it.
         sample_weight = fit_params.get("sample_weight")
 
         # Collect extra confounders from pipeline steps (e.g. FeatureToConfounder)

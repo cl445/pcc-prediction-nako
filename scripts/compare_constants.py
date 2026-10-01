@@ -20,9 +20,8 @@ manual invocation below is for comparing against something else — an older
 snapshot, another checkout, a run from a different machine.
 
 Relative change is reported where it is defined, because it is what
-decides whether a difference matters: PLAN_FULL_RERUN expects the headline
-to shift a little and says a jump is to be investigated rather than
-adopted. ``--threshold`` hides differences below a relative size so the
+decides whether a difference matters: a rerun is expected to shift the
+headline a little, and a jump is to be investigated rather than adopted. ``--threshold`` hides differences below a relative size so the
 floating-point noise of a reordered sum does not crowd out the real
 movement.
 

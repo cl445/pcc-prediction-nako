@@ -33,7 +33,7 @@ PARQUET_SUPPLEMENTARY := \
 FIXTURE_CANNOT_RUN := persistence_adjustment reporting_style_robustness
 SMOKE_SUPPLEMENTARY := $(filter-out $(FIXTURE_CANNOT_RUN),$(PARQUET_SUPPLEMENTARY))
 
-.PHONY: all analysis analysis-smoke check-runs data pipeline figures statistics supplementary \
+.PHONY: all analysis analysis-smoke check-paper check-runs data pipeline figures statistics supplementary \
         lint format format-check fix test typecheck check check-decision-refs \
         smoke-data smoke-test smoke-test-mri-lean smoke-test-nonmri-lean \
         smoke-test-transfer-nonmri-lean smoke-test-all smoke-supplementary clean
@@ -56,6 +56,20 @@ analysis:
 RUNS_DIR ?= results/runs
 check-runs:
 	uv run python scripts/check_run_stacks.py --runs-dir $(RUNS_DIR)
+
+# Does every number the manuscript carries by hand match the artifacts it was
+# transcribed from? Checks paper/results_constants.tex and the results tables
+# typed into paper/sections/. Lists what a rerun moved; non-zero exit while
+# anything is still to be carried over. Pass BEFORE_RUNS_DIR and
+# BEFORE_CONSTANTS_DIR (the pre-rerun snapshots) to tell a stale value from a
+# wrong mapping. Both checks always run, so one report covers both.
+BEFORE_ARGS = $(if $(BEFORE_RUNS_DIR),--before-runs-dir $(BEFORE_RUNS_DIR)) \
+	$(if $(BEFORE_CONSTANTS_DIR),--before-constants-dir $(BEFORE_CONSTANTS_DIR))
+check-paper:
+	@status=0; \
+	uv run python scripts/check_paper_constants.py $(BEFORE_ARGS) || status=1; \
+	uv run python scripts/check_paper_tables.py $(BEFORE_ARGS) || status=1; \
+	exit $$status
 
 # Same graph as `analysis`, but on generated synthetic data (config_smoke.toml,
 # output to smoke_data/ and smoke_results/). Fast end-to-end wiring check; the

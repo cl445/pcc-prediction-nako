@@ -355,9 +355,9 @@ independent of `smoking_status`. The redundancy is the point. The
 never < former < current spacing that nothing justifies. The binary supplies
 that one contrast without the assumption.
 
-**The cost, stated plainly:** stability selection scores the two columns
-separately and splits the tobacco signal between them. The *effect* is therefore
-not read off the selection frequencies; it is reported by
+**The cost, stated plainly:** the two columns enter the base learner
+separately, which splits the tobacco signal between them. The *effect* is
+therefore not read off the modality-level attribution; it is reported by
 `scripts/supplementary/smoking_adjustment.py`, which expands the status into
 never/former/current indicators for exactly this reason. Per-feature SHAP
 attribution does not exist here either way — `shap_analysis.py` runs on the
@@ -543,10 +543,9 @@ Two alternatives were considered and rejected:
   primary analysis. Not a reasonable price for a question about a secondary
   mode.
 
-Single-feature sub-modalities are not a problem in a stacking setup: stability
-selection reduces to keeping the feature, the logistic base learner becomes a
-univariate indicator, and the meta-learner attributes SHAP to exactly that
-score. That is the quantity the split mode exists to report — which mental
+Single-feature sub-modalities are not a problem in a stacking setup: the
+logistic base learner becomes a univariate indicator and the meta-learner
+attributes SHAP to exactly that score. That is the quantity the split mode exists to report — which mental
 health screener contributes most.
 
 **Where:** `data_manager.py` (`MH_SUBMODALITY_COLUMNS`), `preprocessing.py`
@@ -770,8 +769,8 @@ pipeline API has always carried `orthogonalize` as a parameter.
 **Decision:** Every stochastic component takes its seed from
 `config.toml`'s `random_state`. None of them draws from global state.
 
-**The chain:** Pipeline → ModalityPipelineFactory → {StabilitySelection,
-LogisticRegressionCV, Orthogonalizer, PCA}; Pipeline → MetaLearner →
+**The chain:** Pipeline → ModalityPipelineFactory → {LogisticRegressionCV,
+Orthogonalizer, PCA}; Pipeline → MetaLearner →
 {XGBClassifier, RandomizedSearchCV, StratifiedKFold for the inner folds};
 Pipeline → `_nested_cv` → outer StratifiedKFold; Pipeline →
 `_permutation_test_cv` → `np.random.default_rng`; Pipeline → `_evaluate` →
@@ -1008,14 +1007,14 @@ division of work. This makes it comparable on both machines *before* the run,
 and a mismatch names the modality rather than merely its existence.
 
 **What was deliberately left alone:** modality parallelism in
-`create_oof_predictions`. Both callers leave `n_jobs` at 1, and that step is 41
-of `lean_pooled`'s 47 hours — about 4 h per fold, against 10 s for the
+`create_oof_predictions`. Both callers leave `n_jobs` at 1, and that step was
+41 of `lean_pooled`'s 47 hours — about 4 h per fold, against 10 s for the
 meta-learner. Enabling it is plausible, since the modalities are independent
-and the backend is threads, but the stability selection underneath already runs
-at `n_jobs=-1`, so oversubscription is as likely as a speed-up. That is a
-measurement on one fold, not an assumption, and it belongs before a rerun
-rather than inside one. Evidence that a fold still produces a bit-identical
-`predictions.csv` would be the precondition.
+and the backend is threads, but the stability selection underneath ran at
+`n_jobs=-1`, so oversubscription was as likely as a speed-up. §2.33 has since
+removed that stage, which was 87 % of this run, so the question is worth
+re-measuring rather than answering from these figures. Evidence that a fold
+still produces a bit-identical `predictions.csv` remains the precondition.
 
 **Where:** `scripts/run_analysis.sh`, `scripts/check_run_stacks.py`,
 `run_comparability.py`, `orchestration.py` (`_get_config`, `run`,
@@ -1288,3 +1287,315 @@ for which metric — it is now true of one and not the other.
 
 **Where:** `src/pcc_analysis/evaluation.py`,
 `scripts/recompute_confidence_intervals.py`, `scripts/compare_constants.py`
+
+---
+
+### 2.32 The MRI block is ablated as a block, with the meta-learner retrained
+
+**Decision:** `_block_ablation_oos` removes all six MRI atlases at once inside
+every outer fold and scores the held-out fold twice: with the six columns
+masked under the fold's own meta-learner, and with the meta-learner refitted
+on the nine remaining columns. Both variants are set against the full model
+with a paired participant bootstrap and a Nadeau-Bengio test over the folds.
+The verdict is an equivalence test against a margin fixed here, before the
+run that produces the numbers.
+
+**Why the single-modality ablation does not answer this:** §2.12 masks one
+modality at a time. For six atlases that all summarise the same volumetry,
+the other five keep carrying the information the masked one lost, so each
+single delta is small by construction, and their sum (ΔPR-AUC 0.0090 over the
+six in the 2026-08-14 primary run) is not the delta of the block. Masking is
+also not removal: the fold's trees were grown with the column present, and
+XGBoost routes a NaN into a learned default branch. A reviewer can say the
+MRI null was never tested against a model that did not have MRI. Now it is.
+
+**Why retraining stops at the meta-learner:** the pipeline is a stacking.
+Each base learner sees only its own modality and is orthogonalised only
+against age, sex and centre; no base learner's out-of-fold prediction depends
+on which other modalities are in the stack. "Retrained without MRI" is
+therefore exactly the fold's meta-learner refitted on the nine non-MRI
+columns of the same training-fold stacking matrix. That costs the 35 s per
+fold the meta-learner search takes, not the hours the base learners take.
+
+**Pre-specified on 2026-09-15, before the run:**
+
+- Margin 0.03 on ROC-AUC and on PR-AUC. The ROC-AUC value is the
+  transportability margin the manuscript already carries
+  (`\resTostRocMargin`); PR-AUC, the manuscript's primary metric, had no
+  margin, so it gets the same one. A result far inside the margin is no
+  reason to tighten it afterwards, and a result outside it is a finding.
+- Criterion: the 95 % interval of the delta (full minus variant) lies
+  entirely within ±margin, on both metrics. Equivalence rather than
+  non-inferiority, so that a model that is *better* without MRI also has to
+  sit inside the margin to count as "no contribution".
+- Uncertainty: paired percentile bootstrap over participants, 1000 draws,
+  ROC-AUC stratified and PR-AUC unstratified as in §2.31, as the primary
+  criterion. `compute_paired_bootstrap_delta_ci` draws through the same
+  index helper as `compute_bootstrap_ci`, so the two resample the same
+  participants for the same seed. The Nadeau-Bengio test over the ten
+  per-fold deltas is secondary: it rests on ten fold scores where the
+  bootstrap rests on every participant.
+- Both variants. The masked one is the contrast that shows what the
+  single-modality ablation could and could not see; the retrained one is the
+  test.
+- Block membership by prefix: `ABLATION_BLOCKS = {"mri": "mri_"}`, resolved
+  against the run's modality names. A prefix that matches nothing is a
+  `ValueError` in the resolver; the pipeline turns that into a warning and
+  skips the step, which is the right outcome for the Lean stacks, which
+  carry no MRI.
+- The same hyperparameter search width and seed as the fold's original
+  meta-learner (`hyperparam_iterations` of the run, 50 in the primary run),
+  not the untuned learner of the incremental analysis (§2.12): an untuned
+  model without MRI would lose for the wrong reason.
+
+**What is written:** `block_ablation_oos.csv`, one row per block and variant
+(deltas, intervals, Nadeau-Bengio statistics, `n_removed`), and
+`block_ablation_oos_predictions.csv` with the concatenated held-out
+predictions of the full model and both variants, so the intervals can be
+recomputed offline the way `recompute_confidence_intervals.py` does for the
+primary ones. Folds are concatenated in the order of §2.12, so `roc_full` and
+`pr_full` are the numbers in `modality_ablation_oos.csv`.
+`scripts/supplementary/block_ablation.py` turns the CSV into the
+`\resMriBlock*` constants and the verdict; the margin lives there as a
+constant without a command-line override.
+
+**When it is skipped:** distributed fold runs and `merge_fold_results`, which
+never populate the per-fold structures (§2.12), and any run without a member
+of the block.
+
+**Verification:** `tests/test_orchestration.py` (one row per block and
+variant, both files, the full-model reference equals the single-modality
+ablation's, removing the fixture's strongest modality costs discrimination in
+both variants, the retrained learner sees the surviving columns with the
+run's search width, the empty and the no-MRI cases);
+`tests/test_evaluation.py` (identical predictions give [0, 0],
+reproducibility across `n_jobs`, `stratify` observed, both bootstraps draw
+the same resamples); `tests/test_block_ablation_constants.py` (the verdict
+rule on both bounds of both metrics, refusal of an incomplete file). The
+primary rerun is the end-to-end check: its cross-validation files have to be
+byte-identical to the 2026-08-14 run, because nothing here touches the fold
+loop. The refactor of `compute_bootstrap_ci` was checked on the stored
+artifacts before the commit: all 44 intervals of the eleven runs (ROC-AUC and
+PR-AUC, stratified and not, seed 42, 1000 draws) come out identical to the
+last digit under the old and the new code. `recompute_confidence_intervals.py`
+could not serve as that check, because its `STORED` table still says the
+PR-AUC files are stratified, which its own `--write` under §2.31 made untrue;
+it now refuses every run at the first one it reads.
+
+**Where:** `src/pcc_analysis/orchestration.py` (`ABLATION_BLOCKS`,
+`resolve_ablation_blocks`, `_block_ablation_oos`, step 7c in
+`_run_post_cv_steps`), `src/pcc_analysis/evaluation.py`
+(`_bootstrap_indices`, `compute_paired_bootstrap_delta_ci`),
+`src/pcc_analysis/_types.py` (`PipelineResult`),
+`scripts/supplementary/block_ablation.py`, `scripts/run_analysis.sh` (panels
+step)
+
+---
+
+### 2.33 The feature-selection stage is removed, because it never selected
+
+**Decision:** The `StabilitySelector` step between the scaler and the base
+learner is gone from all six non-MRI modalities that carried it (SES,
+cognitive, physical activity, medical history, lab values, mental health). The
+class stays at `pcc_analysis.stability_selection`, unused, because every
+`final_model.pkl` written before this change holds fitted instances of it and
+`scripts/pipeline/03_apply_transfer.py` unpickles one.
+
+**What the stage did, counted from the run logs.** Each full run calls it 396
+times (6 modalities x (10 outer folds x 6 fits + 6 fits of the final model)),
+`split_mh` 660, each Lean run 198:
+
+| Run | Calls | With a feature dropped |
+|---|---|---|
+| primary, control, mixed_controls, neurocog | 396 each | 0 |
+| split_mh | 660 | 0 |
+| lean_mri, control_lean, lean_non_mri, lean_pooled | 198 each | 0 |
+| no_dml | 396 | 78 |
+
+Across the ten orthogonalised runs that is 3,036 calls without a single
+dropped feature. Only `no_dml` selected anything: SES lost 4 to 10 of 75 to 77
+features in all 66 of its calls, and mental health one of 15 in 12 of 66.
+Orthogonalisation, not the threshold, is what made the stage inert — it
+removes the demographic axis the selector would otherwise have ranked on.
+
+**What it cost.** Summing the time between each call's first and last log
+line:
+
+| Run | Stage | Whole run | Share |
+|---|---|---|---|
+| primary | 0.8 h | 1.9 h | 42 % |
+| no_dml | 2.9 h | 3.7 h | 78 % |
+| lean_non_mri | 27.7 h | 33.2 h | 83 % |
+| lean_pooled | 31.7 h | 36.3 h | 87 % |
+
+**Why it was not retuned instead.** A diagnostic on the full primary sample
+(n = 8,461, preprocessing as in the run up to the scaler, 50 half-subsamples
+over 14 lambda points, statistic as Meinshausen and Bühlmann define it;
+one-off script, 2026-09-10, not in the repo) found no natural operating point:
+
+| Modality | p | Screening (q = p/2, pi = 0.6) | Error control (q = sqrt(0.8p), pi = 0.9) |
+|---|---|---|---|
+| SES | 77 | 25 | 2 |
+| cognitive | 8 | 3 | 0 |
+| physical activity | 20 | 9 | 2 |
+| medical history | 20 | 8 | 1 |
+| lab values | 16 | 7 | 1 |
+| mental health | 15 | 7 | 2 |
+
+Selection frequencies fall off smoothly along the path, with no knee. What
+survives is decided by the lambda range, not by the data, and under error
+control one to three variables per modality would remain, none at all for
+cognition. The base learners are penalised already.
+
+**A documentation error found on the way:** the supplement and
+`docs/classifier_configuration.md` both called averaging over the
+regularisation path *more permissive* than Meinshausen and Bühlmann's maximum.
+The mean is at most the maximum, so averaging is the stricter statistic. The
+sentence is gone with the section.
+
+**It was expected to move no number, and it does move numbers.** The argument
+was that at full selection the selector returns its input with the column
+order untouched, draws from its own `default_rng(random_state)` rather than
+the global RNG, and is surrounded by seed-bound steps (§2.19). Values and
+column order are indeed preserved. Array layout is not: `transform` computes
+`X_array[:, self.selected_features_]`, and fancy indexing allocates a fresh
+array even when it selects every column in order — an F-contiguous one, where
+the `StandardScaler` above it hands down a C-contiguous one. The classifier
+below therefore saw a different memory layout with the stage than without it.
+
+Measured on the real cognitive matrix with the pipeline's own
+`LogisticRegressionCV` configuration: identical values in C and in F order
+give identical coefficients and `predict_proba` outputs that differ by one
+unit in the last place (2.2e-16). The meta-learner turns that into the fourth
+decimal, because a split threshold in a boosted tree either falls on one side
+of such a value or the other.
+
+**What the re-run of 2026-09-22 shows.** The primary configuration, same data
+(fingerprint `06c131e97f8d475b`), re-run on ws01 against the 2026-08-14 run on
+ws02:
+
+- The six MRI atlases, cardiovascular and lung function — every modality that
+  never carried the stage — are bit-identical in all ten folds. The two
+  machines reproduce each other exactly, so the machine is not the cause.
+- `cognitive`, `medical_history`, `mental_health`, `physical_activity` and
+  `ses` differ in all ten folds; `lab_values`, which also carried the stage,
+  is identical in all ten.
+- Headline metrics move in the fourth decimal: ROC-AUC 0.66433 to 0.66438,
+  PR-AUC 0.41283 to 0.41261. At the precision the manuscript prints, ROC-AUC,
+  PR-AUC and the Brier score are unchanged, while calibration slope (1.016 to
+  1.029), intercept (0.009 to 0.020), ECE (0.015 to 0.016) and PPV at
+  90 % specificity (0.530 to 0.556) are not.
+
+Neither set of numbers is the more correct one. The difference is the
+arithmetic noise of an irrelevant implementation detail, well inside the
+reported interval for the headline metrics; it is reported here because the
+claim that the removal is inert was made in this file and is wrong.
+
+**Verification:** `make check` and `make smoke-test-all` pass. Byte-identity
+against the published run is not available and, per the above, was never
+available; the re-run establishes the size of the difference instead.
+
+**Why the re-runs are stamped dirty.** All eleven runs of 2026-09-22/23
+record commit `0b623f2` with `dirty: true`. The checkout on ws01 differed from
+that commit only by four untracked log files (`queue.log`,
+`rerun_primary.log`, `rerun_no_dml.log`, `rerun_rest.log`), which the re-run's
+own shell redirects wrote while the runs were going. `git status --porcelain`
+on 2026-09-28 showed those four and no modified tracked file. The logs are
+kept under `results/rerun_logs_2026-09-22/` and removed from the checkout, so
+later runs there record a clean tree.
+
+**Where:** `src/pcc_analysis/modality_pipelines.py` (`_stability_step` and its
+six call sites, the `n_subsamples` constructor parameter),
+`src/pcc_analysis/orchestration.py` (constructor, factory calls, `_get_config`,
+the `run_pcc_pipeline` overloads), `src/pcc_analysis/_types.py`
+(`PipelineConfig`), `src/pcc_analysis/config.py` (default),
+`src/pcc_analysis/stability_selection.py` (module docstring),
+`tests/test_modality_pipelines.py`, `tests/test_orchestration.py`,
+`tests/test_transfer.py`, `tests/test_stability_selection.py`,
+`docs/classifier_configuration.md`, `docs/preprocessing.md`, `README.md`,
+`scripts/run_analysis.sh`
+
+### 2.34 Variable names checked against the NAKO dictionary; hypertension and number series enter the model (2026-09-28)
+
+**Finding.** A review before the second preprint version found that the
+baseline table's "Hypertension" row was current atopic eczema. Every raw
+variable the extractors read was then checked against the four NAKO data
+dictionaries (`dd_nako882.xlsx`, `dd_Nako_882_20260410.xlsx`,
+`dd_Nako_882_NAM_45_20260806.xlsx`, `NAKO_DD_fuer_UA.xlsx`) and the data
+handbook (edition 11/2025). The extractors always read the intended NAKO
+column and computed on it correctly; what was wrong was the name they gave
+it, and in three places a decision that rested on the name:
+
+| Old column | Raw variable | Meaning per NAKO | Consequence |
+|---|---|---|---|
+| `has_hypertension`, `hypertension_age_*` | `a_hte_ad_cur`, `a_hte_ad_onset(_cat)` | current atopic eczema, age at onset | table row wrong; real hypertension never entered the model |
+| `cognitive_composite_score` | `a_npsy_sumts6` | number-series test, ability parameter | dropped as a "NAKO composite", which it is not; stays dropped for another reason (below) |
+| `number_series` | `a_npsy_sumts5` | Purdue Pegboard, pin pairs placed | ran under the wrong name |
+| `income_adequacy` | `a_ses_incgw / a_ses_bedarfgw` | `a_ses_incgw` is already net equivalised income | divided by the needs weight twice |
+| `surgery_general_anesthesia_1…7_age` | `a_op_alg1a…g_age` | cardiovascular procedures | name only |
+| `employment_duration_*`, `employment_date` | `a_ses_el_seit_j`, `a_ses_el_gesamt`, `a_ses_el_datum` | unemployment duration and start | name only |
+| `german_education_level` | `a_ses_deutsch` | German language proficiency | name only |
+| `number_children` | `a_ses_child` | children under 14 in the household | name only |
+| `stroke_age`, `epilepsy_age`, `parkinsons_age` | `a_*_yearsfirst` | years since the first event | name only |
+| `household_minutes_week` | `a_quap_hausarbeit` | minutes **per day** (all QUAP durations are) | name only |
+| `depression_episode_duration` | `a_emo_dauer_dperiode` | time since the last depressed period | name only |
+| `gad7_diagnosis` | `a_emo_gad7_dia` | GAD-7 severity category 0–4 | name only; dropped anyway |
+| `augmentation_index` | `vae_ex_aix_ao` | no NAKO code list; -9 is a real reading | -9 % was set to missing |
+
+**Decisions, fixed before the re-run (2026-09-28, Claas):**
+- `has_hypertension` = `d_an_cv_6 == 1` ("Has a doctor ever diagnosed ...
+  high blood pressure?"), `hypertension_age_onset` = `a_an_cvht_age`. Coded
+  like every other flag: only 1 is yes, so "don't know", "no answer" and
+  missing count as no.
+- Atopic eczema stays in the model under its own name.
+- No other unused diagnosis (`d_an_cv_1…5`, `d_an_met_1…4`) is added now. They
+  would be a new specification chosen after the results are known;
+  hypertension is added because the manuscript already reports it.
+- `number_series_ability` stays out of the model, now for the right reason:
+  on the full cohort it takes six distinct values and is unrelated to age
+  (r = 0.01), education (r = 0.00) and every other cognitive test
+  (|r| <= 0.01), while those show the expected associations with each other,
+  age and education. As delivered it carries no ability signal; whether the
+  export is faulty is a question for NAKO. The pegboard stays as
+  `purdue_pegboard_pairs`, and cognitive keeps its 8 features. (First decided
+  as "include" before the variable had been looked at; revised the same day
+  on this evidence, before any run.)
+- `income_adequacy` is gone; `equivalised_income` (`a_ses_incgw`,
+  log-transformed) is the feature.
+- `polypharmacy` keeps its definition, 5 or more of the 7 recorded drug
+  classes, and is labelled that way; it was never a model feature.
+- Hypertension joins the Lean stack with the rest of medical history, so the
+  transfer and Lean results move too.
+- All ten configurations and the transfer are re-run.
+
+- `augmentation_index` keeps -9 as well as -5; the other negative codes lie
+  outside its plausibility range and are removed there.
+
+**Checked and left as they are:**
+- `occupational_activity_level` (`a_quap_beruf`): 1 = not employed, 2–7 =
+  sedentary to very strenuous. Numeric, so not employed ranks lowest; that
+  reads as no occupational activity and is kept, now documented.
+- `cigarettes_per_day` (`a_smok_past_cig_d`) is NAKO's lifetime average per
+  day and exists only for current smokers (never smokers 0, former smokers
+  missing). The feature is consistent; the manuscript's "current cigarettes
+  per day" is corrected there.
+- Laboratory values: NAKO stores the detection limit in place of a censored
+  value and flags it in a `sa_*_info` column that is not in our export, so
+  censoring (mainly hsCRP at its lower limit) cannot be identified. A
+  limitation, not a fix.
+- Spirometry predicted values: the handbook calls them "Sollwert" without
+  naming the equation; the GLI-2012 attribution is removed from the docs.
+
+**Guard against a repeat:** `tests/test_variable_mapping.py` pins each
+corrected raw-to-column mapping.
+
+**Where:** `src/pcc_analysis/data_processing/medical_history.py`, `ses.py`,
+`cognitive.py`, `cardiovascular.py`, `physical_activity.py`,
+`mental_health.py`, `mh_longitudinal.py` (docstring);
+`src/pcc_analysis/data_manager.py` (MH sub-modality columns);
+`smoke_test/generators.py`, `smoke_test/profiler.py`; `src/pcc_analysis/preprocessing.py` (drop lists, SES date
+column); `src/pcc_analysis/modality_pipelines.py` (`SES_LOG_COLUMNS`);
+`scripts/pipeline/05_compute_statistics.py` (table label);
+`docs/preprocessing.md`; `tests/test_preprocessing.py`,
+`tests/test_variable_mapping.py`. Plan and audit:
+`../PLAN_VARIABLE_MAPPING.md` (umbrella).

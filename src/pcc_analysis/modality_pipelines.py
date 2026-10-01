@@ -31,7 +31,6 @@ from .preprocessing import (
     create_physical_activity_preprocessor,
     create_ses_preprocessor,
 )
-from .stability_selection import StabilitySelector
 
 # Per-modality log1p targets — heavily right-skewed measurements that
 # approximate log-normal distributions. Applied upstream of the DML
@@ -47,18 +46,16 @@ LAB_LOG_COLUMNS: list[str] = [
 SES_LOG_COLUMNS: list[str] = [
     "income_category",
     "income_position",
-    "income_weighted",
-    "needs_weighted",
-    "income_adequacy",
-    "employment_duration_years",
-    "employment_duration_total",
+    "equivalised_income",
+    "unemployment_duration_current_years",
+    "unemployment_duration_total_years",
 ]
 COGNITIVE_LOG_COLUMNS: list[str] = [
     "stroop_colors_time",
     "stroop_interference_time",
 ]
 PHYSICAL_ACTIVITY_LOG_COLUMNS: list[str] = [
-    "household_minutes_week",
+    "household_minutes_day",
     "active_transport_summer",
     "active_transport_winter",
     "walking_summer",
@@ -104,7 +101,7 @@ class ModalityPipelineFactory:
     orthogonalize : bool
         Whether to orthogonalize (except demographics).
     cv : int
-        CV folds for orthogonalization / stability selection.
+        CV folds for orthogonalization.
     """
 
     def __init__(
@@ -113,13 +110,11 @@ class ModalityPipelineFactory:
         orthogonalize: bool = True,
         cv: int = 5,
         n_jobs: int = -1,
-        n_subsamples: int = 100,
     ) -> None:
         self.random_state = random_state
         self.orthogonalize = orthogonalize
         self.cv = cv
         self.n_jobs = n_jobs
-        self.n_subsamples = n_subsamples
 
     # ------------------------------------------------------------------
     # Helpers
@@ -165,21 +160,6 @@ class ModalityPipelineFactory:
             ),
         )
 
-    def _stability_step(
-        self, name: str, lambda_grid: np.ndarray | None = None
-    ) -> tuple[str, StabilitySelector]:
-        return (
-            "stability_selector",
-            StabilitySelector(
-                lambda_grid=lambda_grid,
-                threshold=0.6,
-                n_subsamples=self.n_subsamples,
-                random_state=self.random_state,
-                name=name,
-                n_jobs=self.n_jobs,
-            ),
-        )
-
     # ------------------------------------------------------------------
     # Pipeline builders
     # ------------------------------------------------------------------
@@ -212,10 +192,6 @@ class ModalityPipelineFactory:
             steps.append(self._ortho_step())
         steps += [
             ("scaler", StandardScaler()),
-            self._stability_step(
-                "ses",
-                lambda_grid=np.array([0.001, 0.01, 0.1, 1.0, 10.0]),
-            ),
             (
                 "classifier",
                 self._lr_cv(
@@ -239,9 +215,6 @@ class ModalityPipelineFactory:
             steps.append(self._ortho_step())
         steps += [
             ("scaler", StandardScaler()),
-            self._stability_step(
-                "cognitive", lambda_grid=np.array([0.001, 0.01, 0.1, 1.0])
-            ),
             (
                 "classifier",
                 self._lr_cv(
@@ -264,10 +237,6 @@ class ModalityPipelineFactory:
             steps.append(self._ortho_step())
         steps += [
             ("scaler", StandardScaler()),
-            self._stability_step(
-                "physical_activity",
-                lambda_grid=np.array([0.001, 0.01, 0.1, 1.0, 10.0]),
-            ),
             (
                 "classifier",
                 self._lr_cv(
@@ -289,10 +258,6 @@ class ModalityPipelineFactory:
             steps.append(self._ortho_step())
         steps += [
             ("scaler", StandardScaler()),
-            self._stability_step(
-                "medical_history",
-                lambda_grid=np.array([0.001, 0.01, 0.1, 1.0, 10.0]),
-            ),
             (
                 "classifier",
                 self._lr_cv(
@@ -316,9 +281,6 @@ class ModalityPipelineFactory:
             steps.append(self._ortho_step())
         steps += [
             ("scaler", StandardScaler()),
-            self._stability_step(
-                "lab_values", lambda_grid=np.array([0.01, 0.1, 1.0, 10.0])
-            ),
             (
                 "classifier",
                 self._lr_cv(
@@ -383,10 +345,6 @@ class ModalityPipelineFactory:
             steps.append(self._ortho_step())
         steps += [
             ("scaler", StandardScaler()),
-            self._stability_step(
-                "mental_health",
-                lambda_grid=np.array([0.001, 0.01, 0.1, 1.0]),
-            ),
             (
                 "classifier",
                 self._lr_cv(

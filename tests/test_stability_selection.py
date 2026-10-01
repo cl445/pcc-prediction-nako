@@ -1,4 +1,9 @@
-"""Smoke tests for StabilitySelector."""
+"""Smoke tests for StabilitySelector.
+
+The class is no longer part of any pipeline (DECISIONS.md §2.33). These tests keep
+it loadable and correct, because the fitted instances inside every
+``final_model.pkl`` written before the removal are unpickled through it.
+"""
 
 from __future__ import annotations
 
@@ -102,8 +107,8 @@ def _signal_and_noise(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]
 def test_noise_features_excluded(rng: np.random.Generator) -> None:
     """The selector finds the signal and drops most of the noise.
 
-    At threshold 0.8. The pipeline configures 0.6, where this same assertion
-    does not hold — see the test below, which is where that is pinned.
+    At threshold 0.8. At 0.6 this assertion does not hold: on an outcome of
+    pure coin flips the selector keeps all ten features (DECISIONS.md §2.33).
     """
     X, y = _signal_and_noise(rng)
     sel = StabilitySelector(
@@ -116,33 +121,3 @@ def test_noise_features_excluded(rng: np.random.Generator) -> None:
     selected = sel.selected_features_
     assert any(i < 2 for i in selected)
     assert len(selected) < 10
-
-
-def test_the_configured_threshold_selects_everything_including_noise(
-    rng: np.random.Generator,
-) -> None:
-    """What ``threshold=0.6`` does, which is nothing.
-
-    ``ModalityPipelineFactory`` builds every selector at 0.6, and at that
-    threshold the stage is a pass-through: on an outcome that is pure coin
-    flips, with no feature carrying any signal at all, it still selects all
-    ten. The production run agrees — all 396 calls kept 100 % of their
-    features, in every modality and every fold.
-
-    Pinned rather than fixed, because raising the bar moves every number the
-    manuscript reports. The value of the test is that it fails the moment the
-    stage starts selecting, which is the moment the prose describing it has to
-    change too.
-    """
-    X, _ = _signal_and_noise(rng)
-    coin_flips = rng.binomial(1, 0.5, X.shape[0]).astype(float)
-
-    sel = StabilitySelector(
-        n_subsamples=100,
-        lambda_grid=np.array([0.001, 0.01, 0.1, 1.0, 10.0]),
-        threshold=0.6,
-        random_state=42,
-    )
-    sel.fit(X, coin_flips)
-
-    assert len(sel.selected_features_) == X.shape[1]

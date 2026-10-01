@@ -280,6 +280,45 @@ class EvaluationMetrics:
 # ---------------------------------------------------------------------------
 
 
+def _bootstrap_indices(
+    y_true: np.ndarray,
+    n_bootstrap: int,
+    rng: np.random.Generator,
+    stratify: bool,
+) -> list[np.ndarray]:
+    """Draw every resample up front, so the interval cannot depend on ``n_jobs``.
+
+    Stratified resampling draws the two classes separately, so every
+    bootstrap sample carries the original prevalence. That protects against
+    an all-one-class sample, on which the metric is undefined — a real
+    concern on a few dozen positives, and impossible on several thousand.
+
+    It also removes prevalence as a source of variation, which narrows the
+    resulting interval. ROC-AUC is invariant to prevalence and unaffected;
+    PR-AUC is not, so its interval comes out materially too narrow. That is
+    why the callers stratify the one and not the other (DECISIONS §2.31).
+
+    Both bootstrap functions below draw through this one helper with the
+    same call sequence on the generator, so the paired interval and the
+    single-prediction interval resample the same participants for the same
+    seed.
+    """
+    n = len(y_true)
+    if stratify:
+        idx_pos = np.where(y_true == 1)[0]
+        idx_neg = np.where(y_true == 0)[0]
+        return [
+            np.concatenate(
+                [
+                    rng.choice(idx_neg, size=len(idx_neg), replace=True),
+                    rng.choice(idx_pos, size=len(idx_pos), replace=True),
+                ]
+            )
+            for _ in range(n_bootstrap)
+        ]
+    return [rng.choice(n, size=n, replace=True) for _ in range(n_bootstrap)]
+
+
 def compute_bootstrap_ci(
     y_true: np.ndarray,
     y_pred_proba: np.ndarray,
@@ -293,33 +332,7 @@ def compute_bootstrap_ci(
     from joblib import Parallel, delayed
 
     rng = np.random.default_rng(random_state)
-    n = len(y_true)
-
-    # Pre-generate all bootstrap indices for reproducibility.
-    #
-    # Stratified resampling draws the two classes separately, so every
-    # bootstrap sample carries the original prevalence. That protects against
-    # an all-one-class sample, on which the metric is undefined — a real
-    # concern on a few dozen positives, and impossible on several thousand.
-    #
-    # It also removes prevalence as a source of variation, which narrows the
-    # resulting interval. ROC-AUC is invariant to prevalence and unaffected;
-    # PR-AUC is not, so its interval comes out materially too narrow. That is
-    # why the callers below stratify the one and not the other.
-    if stratify:
-        idx_pos = np.where(y_true == 1)[0]
-        idx_neg = np.where(y_true == 0)[0]
-        indices = [
-            np.concatenate(
-                [
-                    rng.choice(idx_neg, size=len(idx_neg), replace=True),
-                    rng.choice(idx_pos, size=len(idx_pos), replace=True),
-                ]
-            )
-            for _ in range(n_bootstrap)
-        ]
-    else:
-        indices = [rng.choice(n, size=n, replace=True) for _ in range(n_bootstrap)]
+    indices = _bootstrap_indices(y_true, n_bootstrap, rng, stratify)
 
     def _score_one(idx: np.ndarray) -> float | None:
         try:
@@ -348,6 +361,74 @@ def compute_bootstrap_ci(
     arr = np.array(scores)
     return (
         point,
+        float(np.percentile(arr, 100 * alpha / 2)),
+        float(np.percentile(arr, 100 * (1 - alpha / 2))),
+    )
+
+
+def compute_paired_bootstrap_delta_ci(
+    y_true: np.ndarray,
+    y_pred_a: np.ndarray,
+    y_pred_b: np.ndarray,
+    metric_func: Callable[[np.ndarray, np.ndarray], float],
+    n_bootstrap: int = 1000,
+    confidence_level: float = 0.95,
+    random_state: int | None = None,
+    n_jobs: int = -1,
+    stratify: bool = True,
+) -> tuple[float, float, float]:
+    """Percentile interval for ``metric(a) - metric(b)`` on the same participants.
+
+    Two models scored on the same held-out participants are not independent,
+    so the difference of two separately bootstrapped metrics overstates the
+    uncertainty of their difference. Here every resample scores both
+    predictions on the same draw and the interval is taken over the
+    per-resample differences. Identical predictions give a difference of
+    exactly zero in every resample and the interval ``[0, 0]``.
+
+    Returns ``(delta, lower, upper)`` with ``delta`` the point estimate on
+    the full sample. The resamples are drawn as in :func:`compute_bootstrap_ci`
+    for the same ``random_state`` and ``stratify``.
+    """
+    from joblib import Parallel, delayed
+
+    if len(y_pred_a) != len(y_true) or len(y_pred_b) != len(y_true):
+        raise ValueError(
+            "y_true, y_pred_a and y_pred_b must have the same length, got "
+            f"{len(y_true)}, {len(y_pred_a)} and {len(y_pred_b)}"
+        )
+
+    rng = np.random.default_rng(random_state)
+    indices = _bootstrap_indices(y_true, n_bootstrap, rng, stratify)
+
+    def _delta_one(idx: np.ndarray) -> float | None:
+        try:
+            y = y_true[idx]
+            return metric_func(y, y_pred_a[idx]) - metric_func(y, y_pred_b[idx])
+        except Exception as e:
+            logger.debug("Paired bootstrap iteration failed: %s", e)
+            return None
+
+    results = Parallel(n_jobs=n_jobs, verbose=0)(
+        delayed(_delta_one)(idx) for idx in indices
+    )
+    deltas = [d for d in results if d is not None]
+
+    n_valid = len(deltas)
+    if n_valid < n_bootstrap * 0.9:
+        logger.warning(
+            "Paired bootstrap CI: only %d/%d samples valid (%.0f%%) — "
+            "CIs may be unreliable for this class distribution",
+            n_valid,
+            n_bootstrap,
+            100 * n_valid / n_bootstrap,
+        )
+
+    alpha = 1 - confidence_level
+    point = metric_func(y_true, y_pred_a) - metric_func(y_true, y_pred_b)
+    arr = np.array(deltas)
+    return (
+        float(point),
         float(np.percentile(arr, 100 * alpha / 2)),
         float(np.percentile(arr, 100 * (1 - alpha / 2))),
     )

@@ -7,10 +7,10 @@ title: >-
 abstract: >-
   Reproducible analysis pipeline for multimodal prediction of post-COVID
   condition (PCC) in the German National Cohort (NAKO): nested 10x5
-  cross-validation with per-modality base learners, stability selection,
-  DML orthogonalisation, and an XGBoost meta-learner.
+  cross-validation with per-modality base learners, DML orthogonalisation,
+  and an XGBoost meta-learner.
 type: software
-version: 1.1.0
+version: 1.2.0
 license: MIT
 identifiers:
   - type: doi

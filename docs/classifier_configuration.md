@@ -79,9 +79,8 @@ The higher `max_iter` is needed because the many one-hot dummies from
 | `Cs` | `logspace(-3, 2, 5)` |
 
 **Rationale:** L1 sparsity focuses the model on the most predictive
-cognitive measures. The stability-selection stage upstream does not reduce the
-set at the configured threshold (see below), so this penalty is where feature
-selection actually happens.
+cognitive measures. This penalty is where feature selection happens; nothing
+upstream of the base learner reduces the feature set (see below).
 
 ### Physical Activity (~17 features)
 
@@ -113,8 +112,8 @@ binary features.
 | `l1_ratios` | `[0.5, 1.0]` (elastic net, L1) |
 | `Cs` | `logspace(-3, 2, 5)` |
 
-**Rationale:** Continuous biomarker features post-stability-selection.  L1
-sparsity selects the most discriminative biomarkers.
+**Rationale:** Continuous biomarker features.  L1 sparsity selects the most
+discriminative biomarkers.
 
 ### Cardiovascular (~7 features)
 
@@ -153,9 +152,8 @@ flow parameters.  L2 regularisation handles mild collinearity.  Uses `lbfgs`
 **Rationale:** Brain MRI features are highly correlated (neighbouring regions
 share volume patterns).  All atlases with >20 features (Desikan, Destrieux,
 Julich, Subcortical, Yeo) receive PCA (95 % variance) before the classifier;
-Cerebellar (12 features) skips PCA.  Stability selection is not used — elastic
-net in the classifier handles both feature selection and correlated-feature
-grouping.  Pure L2 (Ridge) is excluded because it retains all features and
+Cerebellar (12 features) skips PCA.  Elastic net in the classifier handles
+both feature selection and correlated-feature grouping.  Pure L2 (Ridge) is excluded because it retains all features and
 risks overfitting on correlated post-PCA components.  The narrower C range
 (upper bound 10 instead of 100) enforces stronger regularisation to prevent
 overfitting to neuroimaging features.
@@ -166,7 +164,7 @@ overfitting to neuroimaging features.
 
 C-ranges were validated by fitting LogisticRegressionCV on all 14 modalities
 with the full NAKO sample (N=19,240), applying lightweight preprocessing
-(imputation + scaling, no orthogonalisation or stability selection) and
+(imputation + scaling, no orthogonalisation) and
 reporting the selected C, l1-ratio, and non-zero coefficient count per
 modality. The primary validation criterion is that no modality produces a
 **null model**
@@ -184,39 +182,18 @@ solver, causing `ConvergenceWarning` at 10000 iterations.
 
 ---
 
-## Stability selection lambda grids
+## Feature selection stage (removed)
 
-Stability selection as Meinshausen & Bühlmann (2010) define it takes, for
-each feature, the **maximum** selection probability over the regularisation
-path, and keeps features above a threshold. The implementation here averages
-over the path instead, which is a different and more permissive statistic.
+A stability-selection stage (Meinshausen & Bühlmann 2010) used to sit between
+the scaler and the base learner in the six non-MRI modalities carrying more
+than a handful of raw variables. It never selected anything: across the ten
+orthogonalised runs its 3,036 calls kept every feature, in every modality and
+every fold, and on an outcome of pure coin flips it kept all of them too. It
+was removed rather than retuned, because the selection frequencies in these
+data fall off smoothly along the regularisation path, so any operating point
+would have been a choice about the grid rather than a reading of the data.
 
-**What that means in practice, measured rather than assumed:** at the
-configured `threshold=0.6` and the lambda grids below, the stage selects
-everything. In the production run all 396 calls kept 100 % of their features,
-in every modality and every fold. On an outcome of pure coin flips, with no
-feature carrying signal, it still keeps all of them
-(`tests/test_stability_selection.py` pins this).
-
-Read the stage as an elastic-net pre-selection that is currently a
-pass-through, not as a dimensionality reduction. The per-modality feature
-counts above are the counts the base learner receives, before its own penalty
-selects among them. Raising the threshold or moving the grids into the sparse
-region would change every number the pipeline reports, so it is not a change
-to make casually.
-
-All modalities use an explicit 4–5 point grid spanning the relevant range:
-
-| Modality | Lambda grid | Rationale |
-|----------|-------------|-----------|
-| Cognitive | `[0.001, 0.01, 0.1, 1.0]` | 4 points, narrow range for small feature set |
-| Lab values | `[0.01, 0.1, 1.0, 10.0]` | 4 points, shifted range for continuous biomarkers |
-| Physical activity | `[0.001, 0.01, 0.1, 1.0, 10.0]` | 5 points, broad range for mixed feature types |
-| Medical history | `[0.001, 0.01, 0.1, 1.0, 10.0]` | 5 points, broad range for binary disease flags |
-
-MRI atlases do not use stability selection (see MRI section above).
-
-The default grid (`logspace(-3, 1, 20)`) uses 20 points, which provides no
-meaningful improvement in selection stability but increases computation by 4×.
-With `n_bootstrap=100`, a 5-point grid yields 500 fits per stability selection
-(vs. 2000 with 20 points).
+`DECISIONS.md` §2.33 has the per-run counts, the runtime the stage cost, and
+the Meinshausen-Bühlmann diagnostic. The per-modality feature counts above are
+what the base learner receives, and its own elastic-net penalty is where
+feature selection happens.

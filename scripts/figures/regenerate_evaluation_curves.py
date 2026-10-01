@@ -79,6 +79,11 @@ def count_per_bin(y_pred_proba: np.ndarray, n_bins: int = 10) -> list[int]:
     return counts
 
 
+def set_panel_title(ax: plt.Axes, letter: str, title: str) -> None:
+    """Left-aligned panel title with a bold letter, as the captions cite them."""
+    ax.set_title(rf"\textbf{{{letter}}}\enspace {title}", loc="left")
+
+
 def main() -> None:
     df = pd.read_csv(PREDICTIONS_PATH)
     y_true = df["y_true"].to_numpy()
@@ -112,14 +117,12 @@ def main() -> None:
 
     # (A) ROC Curve
     ax = axes[0]
-    ax.plot(
-        fpr, tpr, color=STEEL_BLUE, linewidth=1.5, label=f"Model (AUC = {roc_auc:.3f})"
-    )
+    ax.plot(fpr, tpr, color=STEEL_BLUE, linewidth=1.5, label=f"ROC-AUC = {roc_auc:.3f}")
     ax.plot([0, 1], [0, 1], "k--", linewidth=0.8, label="Chance")
-    ax.set_xlabel("False Positive Rate")
-    ax.set_ylabel("True Positive Rate")
-    ax.set_title("ROC Curve", fontweight="bold")
-    ax.legend(loc="lower right")
+    ax.set_xlabel("False-positive rate")
+    ax.set_ylabel("True-positive rate")
+    set_panel_title(ax, "A", "ROC curve")
+    ax.legend(loc="lower right", fontsize="small")
     ax.grid(alpha=0.2, linestyle="--")
 
     # (B) PR Curve
@@ -129,19 +132,19 @@ def main() -> None:
         precision,
         color=STEEL_BLUE,
         linewidth=1.5,
-        label=f"Model (AP = {ap:.3f})",
+        label=f"PR-AUC = {ap:.3f}",
     )
     ax.axhline(
         y=prevalence,
         color="k",
         linestyle="--",
         linewidth=0.8,
-        label=f"Baseline ({prevalence:.3f})",
+        label=f"Prevalence = {prevalence:.3f}",
     )
     ax.set_xlabel("Recall")
     ax.set_ylabel("Precision")
-    ax.set_title("Precision-Recall Curve", fontweight="bold")
-    ax.legend(loc="upper right")
+    set_panel_title(ax, "B", "Precision-recall curve")
+    ax.legend(loc="upper right", fontsize="small")
     ax.grid(alpha=0.2, linestyle="--")
 
     # (C) Calibration Curve with CIs — zoomed to data range
@@ -173,10 +176,10 @@ def main() -> None:
     )
     ax.set_xlim(0, xlim_max)
     ax.set_ylim(0, min(ci_high.max() * 1.3, 1.0))
-    ax.set_xlabel("Predicted Probability")
-    ax.set_ylabel("Observed Frequency")
-    ax.set_title("Calibration Curve", fontweight="bold")
-    ax.legend(loc="upper left")
+    ax.set_xlabel("Predicted probability")
+    ax.set_ylabel("Observed frequency")
+    set_panel_title(ax, "C", "Calibration curve")
+    ax.legend(loc="upper left", fontsize="small")
     ax.grid(alpha=0.2, linestyle="--")
 
     # Add ECE annotation

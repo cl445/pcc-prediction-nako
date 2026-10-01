@@ -3,10 +3,12 @@
 # run_analysis.sh — run the complete PCC analysis, end to end.
 #
 # This is the analysis as performed for the paper: it runs the full graph
-# in dependency order and writes every paper-bound artifact (LaTeX
-# constants and tables) under results/paper/. Pipeline runs go to
-# deterministic directories under results/runs/ so the downstream
-# figure/panel scripts find them without hand-pasted timestamps.
+# in dependency order and writes every paper-bound artifact. LaTeX constants
+# and tables go under results/paper/; the manuscript's .pgf figures go to
+# the sibling paper/figures/ when a paper checkout is there, and to
+# results/figures/ when it is not. Pipeline runs go to deterministic
+# directories under results/runs/ so the downstream figure/panel scripts
+# find them without hand-pasted timestamps.
 #
 # Re-running this script on the same data therefore *reproduces* its
 # results; reproduction needs no extra steps beyond running it again.
@@ -17,12 +19,22 @@
 #
 # All steps read config.toml for paths and pipeline settings.
 #
-# Runtime: DAYS. Ten nested 10x5 cross-validation runs dominate the
-# wall-clock; each is independent and restartable. The two Lean fits on the
-# large cohorts are most of it — measured at roughly 25 h (lean_non_mri) and
-# 47 h (lean_pooled) against 1.5-2 h for each MRI-cohort run, because both
-# are fitted on tens of thousands of participants rather than the imaged
-# subsample.
+# Runtime: ten nested 10x5 cross-validation runs dominate the wall-clock;
+# each is independent and restartable. The two Lean fits on the large cohorts
+# are most of it, because both are fitted on tens of thousands of participants
+# rather than the imaged subsample. Measured end to end on 2026-09-22/23,
+# one machine (akator-ws01, CUDA), stability-selection stage removed:
+#
+#   lean_pooled 7.5 h   lean_non_mri 6.1 h   neurocog 2.0 h
+#   mixed_controls 1.9 h   primary 1.8 h   split_mh 1.8 h   control 1.5 h
+#   no_dml 1.3 h   lean_mri 1.2 h   control_lean 1.1 h
+#
+# That is 26 h for the ten runs; transfer, figures, statistics and the
+# panels are minutes next to them. The predecessor of this note expected
+# "well under a day" from the stage removal and was wrong by about a day,
+# so treat these as what one machine did rather than as a floor: they were
+# taken on the slower of the two workstations, and a run split across both
+# lands well under them.
 #
 # Usage:
 #   ./scripts/run_analysis.sh                      # on real NAKO data
@@ -38,9 +50,13 @@
 # check at the end. A step whose input another machine produced is not
 # silently skipped: it names the directory it needs and stops.
 #
-# The split that balances is by configuration, not by fold: `--only
-# lean_pooled` on one machine against `--except lean_pooled` on the other
-# puts ~46 h opposite ~38 h. Whichever way it is cut, both machines must
+# The split that balances is by configuration, not by fold, and taking the
+# stability-selection stage out moved where it falls: `--only lean_pooled`
+# against `--except lean_pooled` now puts 7.5 h opposite 18.7 h, because the
+# stage was most of what made lean_pooled the heavy half. An even split
+# takes lean_non_mri across as well, 13.6 h against 12.6 h, at the cost of
+# copying that one directory back afterwards: `figures` and `panels` both
+# read it and stop without it. Whichever way it is cut, both machines must
 # install from the same lockfile — `check_run_stacks.py` at the end says
 # whether they did, but only for the runs it can see, so run it once more
 # over the collected directories after copying them together.
@@ -62,6 +78,7 @@ PY="uv run python"
 SMOKE=0
 SUPP_WARN=()
 SUPP_SKIPPED=()
+FIGURES_SKIPPED=()
 
 # Every step this script can run, in dependency order. The pipeline
 # configurations are named as their run directories, so `--only split_mh`
@@ -594,6 +611,34 @@ fi
 if should_run figures; then
     require_run_dir figures "${RUNS}/primary" primary
     $PY scripts/pipeline/04_generate_figures.py --results-dir "${RUNS}/primary"
+
+    # The manuscript's figures are a second set, and not a copy of the ones
+    # above: these four render the same results in the paper's styling and
+    # write .pgf for LuaLaTeX, which the manuscript pulls in by \input. They
+    # were a manual step until now, so a rerun updated every number in the
+    # paper and none of its figures — a gap nothing reported, because each
+    # half was complete on its own.
+    #
+    # Skipped under --smoke, where running them would be actively wrong:
+    # they resolve their input to results/runs/ directly rather than through
+    # $RUNS, and they write into the sibling paper/figures/ when it exists,
+    # so a smoke run would rebuild the manuscript's figures from the real
+    # results. Reported at the end rather than passed over in silence.
+    if [ "$SMOKE" = 1 ]; then
+        FIGURES_SKIPPED=(
+            scripts/figures/regenerate_evaluation_curves.py
+            scripts/figures/regenerate_modality_contributions.py
+            scripts/figures/regenerate_decision_curve.py
+            scripts/figures/regenerate_lean_dca.py
+        )
+    else
+        require_run_dir figures "${RUNS}/lean_mri" lean_mri
+        require_run_dir figures "${RUNS}/lean_non_mri" lean_non_mri
+        $PY scripts/figures/regenerate_evaluation_curves.py
+        $PY scripts/figures/regenerate_modality_contributions.py
+        $PY scripts/figures/regenerate_decision_curve.py
+        $PY scripts/figures/regenerate_lean_dca.py
+    fi
 fi
 if should_run statistics; then
     $PY scripts/pipeline/05_compute_statistics.py
@@ -617,10 +662,12 @@ if should_run supplementary; then
 fi
 
 # --- 6. Supplementary panels that consume the pipeline run directories -----
-# Each of these reads two run directories and reports a difference between
+# Most of these read two run directories and report a difference between
 # them, so each is a place where two machines' output meets. They refuse the
 # comparison themselves if the two runs disagree on their stack; the
-# directory checks here are only about the input being present at all.
+# directory checks here are only about the input being present at all. The
+# block ablation reads the primary run alone: its comparison is between two
+# meta-learners inside the same run.
 if should_run panels; then
     echo "==> [6/6] Transfer/clinical-utility panels"
     require_run_dir panels "${RUNS}/lean_mri" lean_mri
@@ -631,10 +678,15 @@ if should_run panels; then
     supp scripts/supplementary/transport_panel.py \
         --source-run "${RUNS}/lean_mri" \
         --transfer-run "${RUNS}/transfer_lean_mri_to_non_mri"
+    supp scripts/supplementary/transfer_intercept_sensitivity.py \
+        --source-run "${RUNS}/lean_mri" \
+        --transfer-run "${RUNS}/transfer_lean_mri_to_non_mri"
     supp scripts/supplementary/lean_clinical_utility.py \
         --mri-run "${RUNS}/lean_mri" --non-mri-run "${RUNS}/lean_non_mri"
     supp scripts/supplementary/mh_submodality_panel.py \
         --run-dir "${RUNS}/split_mh" --primary-run "${RUNS}/primary"
+    supp scripts/supplementary/block_ablation.py \
+        --run-dir "${RUNS}/primary"
 fi
 
 echo ""
@@ -653,6 +705,9 @@ if [ "$CONSTANTS_SNAPSHOT_TAKEN" = 1 ]; then
     $PY scripts/compare_constants.py \
         --before "$CONSTANTS_SNAPSHOT" --after "$CONSTANTS_DIR" || true
     echo ""
+elif ! writes_constants; then
+    echo "==> No constants diff: none of the selected steps writes a constant."
+    echo ""
 else
     echo "==> No constants diff: this run found no ${CONSTANTS_DIR} to snapshot,"
     echo "    so every constant it wrote is new. That is the normal first run,"
@@ -668,6 +723,14 @@ if [ "${#SUPP_SKIPPED[@]}" -gt 0 ]; then
     echo "==> ${#SUPP_SKIPPED[@]} supplementary step(s) SKIPPED, not exercised by this check:"
     echo "    they read the raw NAKO export, which --smoke does not synthesise."
     for s in "${SUPP_SKIPPED[@]}"; do echo "      - $s"; done
+    echo ""
+fi
+if [ "${#FIGURES_SKIPPED[@]}" -gt 0 ]; then
+    echo "==> ${#FIGURES_SKIPPED[@]} manuscript figure(s) SKIPPED, not exercised by this check:"
+    echo "    they read results/runs/ directly and write into the sibling"
+    echo "    paper/figures/, so running them here would rebuild the"
+    echo "    manuscript's figures from the real results."
+    for s in "${FIGURES_SKIPPED[@]}"; do echo "      - $s"; done
     echo ""
 fi
 if [ "${#SUPP_WARN[@]}" -gt 0 ]; then

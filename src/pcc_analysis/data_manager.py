@@ -133,7 +133,7 @@ MH_SUBMODALITY_COLUMNS: dict[str, list[str]] = {
         "age_anxiety_onset",
         "depression_duration",
         "depression_duration_past20y",
-        "depression_episode_duration",
+        "months_since_depressed_period",
     ],
     "mh_panic": [
         "phq_panic",
@@ -174,7 +174,7 @@ warning because the family still has columns present.
 
 The lists are aligned with the columns that survive
 ``create_mental_health_preprocessor`` (in ``preprocessing.py``); columns
-the global MH preprocessor drops (e.g. ``gad7_diagnosis``,
+the global MH preprocessor drops (e.g. ``gad7_severity_category``,
 ``phq_stress_moderate``, the redundant binary cutoffs and
 ``mini_major_depression_imputed``) are excluded here too, otherwise
 the sub-modality DataFrame would contain features that are silently

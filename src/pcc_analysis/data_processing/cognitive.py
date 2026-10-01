@@ -40,11 +40,14 @@ def _extract_cognitive_tests(df: DataFrame) -> DataFrame:
     # Digit Span Backwards (working memory)
     r["digit_span_backwards"] = df["a_npsy_sumts4"]
 
-    # Number Series (numerical reasoning, Level 2)
-    r["number_series"] = df["a_npsy_sumts5"]
+    # Purdue Pegboard (fine motor dexterity): number of pin pairs placed
+    r["purdue_pegboard_pairs"] = df["a_npsy_sumts5"]
 
-    # Composite score (NAKO-provided weighted combination)
-    r["cognitive_composite_score"] = df["a_npsy_sumts6"]
+    # Number Series: NAKO's ability parameter for the six-item adaptive test,
+    # not a cognitive composite. It is extracted but dropped in the
+    # preprocessor, because as delivered it carries no ability signal
+    # (DECISIONS §2.34).
+    r["number_series_ability"] = df["a_npsy_sumts6"]
 
     for col in r.columns:
         if col != "ID":

@@ -8,11 +8,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.metrics import average_precision_score, roc_auc_score
 
 from pcc_analysis.evaluation import (
     EvaluationMetrics,
+    _bootstrap_indices,
     _seeded_global_rng,
+    compute_bootstrap_ci,
     compute_decision_curve_analysis,
+    compute_paired_bootstrap_delta_ci,
     expected_calibration_error,
     plot_modality_contribution_boxplot,
     quantile_bin_edges,
@@ -225,3 +229,107 @@ def test_the_metrics_object_reports_the_same_ece_as_the_free_function() -> None:
     ev = EvaluationMetrics(y_true, y_pred_proba)
 
     assert ev.compute_ece() == expected_calibration_error(y_true, y_pred_proba)
+
+
+# ------------------------------------------------------------------
+# Paired bootstrap
+# ------------------------------------------------------------------
+
+
+def _two_models(
+    n: int = 400, seed: int = 0
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Labels plus a stronger and a weaker prediction for the same participants."""
+    rng = np.random.default_rng(seed)
+    y = (rng.uniform(size=n) < 0.3).astype(np.float64)
+    strong = np.clip(y * 0.5 + rng.uniform(0, 0.6, n), 0, 1)
+    weak = np.clip(y * 0.2 + rng.uniform(0, 0.8, n), 0, 1)
+    return y, strong, weak
+
+
+def test_paired_bootstrap_of_identical_predictions_is_exactly_zero() -> None:
+    y, strong, _ = _two_models()
+    delta, lo, hi = compute_paired_bootstrap_delta_ci(
+        y, strong, strong.copy(), roc_auc_score, n_bootstrap=50, random_state=1
+    )
+    assert delta == 0.0
+    assert (lo, hi) == (0.0, 0.0)
+
+
+def test_paired_bootstrap_is_reproducible_and_independent_of_n_jobs() -> None:
+    y, strong, weak = _two_models()
+    serial = compute_paired_bootstrap_delta_ci(
+        y, strong, weak, roc_auc_score, n_bootstrap=100, random_state=7, n_jobs=1
+    )
+    parallel = compute_paired_bootstrap_delta_ci(
+        y, strong, weak, roc_auc_score, n_bootstrap=100, random_state=7, n_jobs=2
+    )
+    assert serial == parallel
+    assert serial[1] < serial[0] < serial[2]
+    assert serial[0] == pytest.approx(roc_auc_score(y, strong) - roc_auc_score(y, weak))
+
+
+def test_paired_bootstrap_respects_stratify() -> None:
+    """Average precision of a constant score is the prevalence.
+
+    Against a perfect score the paired difference is ``1 - prevalence``, which
+    stratified resampling holds fixed and unstratified resampling does not.
+    """
+    y, _, _ = _two_models()
+    perfect = y.copy()
+    constant = np.full_like(y, 0.5)
+    _, lo_strat, hi_strat = compute_paired_bootstrap_delta_ci(
+        y,
+        perfect,
+        constant,
+        average_precision_score,
+        n_bootstrap=100,
+        random_state=3,
+        stratify=True,
+    )
+    _, lo_free, hi_free = compute_paired_bootstrap_delta_ci(
+        y,
+        perfect,
+        constant,
+        average_precision_score,
+        n_bootstrap=100,
+        random_state=3,
+        stratify=False,
+    )
+    assert hi_strat - lo_strat == pytest.approx(0.0)
+    assert hi_free - lo_free > 0.0
+
+
+def test_the_two_bootstraps_draw_the_same_resamples_for_the_same_seed() -> None:
+    """Both go through one index helper, so a paired interval against a
+    constant score reproduces the single-prediction interval up to a shift."""
+    y, strong, _ = _two_models()
+    constant = np.full_like(y, 0.5)
+    _, lo_single, hi_single = compute_bootstrap_ci(
+        y, strong, roc_auc_score, n_bootstrap=100, random_state=11
+    )
+    _, lo_paired, hi_paired = compute_paired_bootstrap_delta_ci(
+        y, strong, constant, roc_auc_score, n_bootstrap=100, random_state=11
+    )
+    assert lo_paired == pytest.approx(lo_single - 0.5)
+    assert hi_paired == pytest.approx(hi_single - 0.5)
+
+
+def test_stratified_resamples_hold_the_number_of_positives_fixed() -> None:
+    y, _, _ = _two_models()
+    n_pos = int(y.sum())
+    rng = np.random.default_rng(5)
+    for idx in _bootstrap_indices(y, 20, rng, stratify=True):
+        assert len(idx) == len(y)
+        assert int(y[idx].sum()) == n_pos
+    rng = np.random.default_rng(5)
+    counts = {
+        int(y[idx].sum()) for idx in _bootstrap_indices(y, 20, rng, stratify=False)
+    }
+    assert len(counts) > 1
+
+
+def test_paired_bootstrap_rejects_mismatched_lengths() -> None:
+    y, strong, weak = _two_models()
+    with pytest.raises(ValueError, match="same length"):
+        compute_paired_bootstrap_delta_ci(y, strong, weak[:-1], roc_auc_score)
